@@ -1,5 +1,6 @@
 from src.config import BOT_TOKEN
 from src.bot.handlers import router as main_router
+from src.database.engine import create_tables
 
 from aiogram import Bot, Dispatcher
 import asyncio
@@ -11,6 +12,9 @@ async def main():
     """
     # Логирование, чтобы видеть информацию о работе бота в консоли 
     logging.basicConfig(level=logging.INFO)
+    
+    # Перед запуском бота создаём таблицы в БД
+    await create_tables()
 
     # Объект бота
     bot = Bot(token=BOT_TOKEN)
