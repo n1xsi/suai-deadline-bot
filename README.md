@@ -16,6 +16,7 @@ suai-deadline-bot/
     │   ├── __init__.py
     │   ├── handlers.py    # Обработчики команд (/start, /help)
     │   ├── keyboards.py   # Код для создания кнопок
+    │   ├── states.py      # Класс состояний для FSM
     │   └── main_bot.py    # Точка запуска бота
     │
     ├── api/               # Компонент 2: Backend-сервер

@@ -3,6 +3,7 @@ from src.bot.handlers import router as main_router
 from src.database.engine import create_tables
 
 from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
 import asyncio
 import logging
 
@@ -20,8 +21,8 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
 
     # Диспетчер. Будет принимать апдейты от Telegram и передавать их хэндлерам 
-    dp = Dispatcher()
-
+    dp = Dispatcher(storage=MemoryStorage())
+    
     # Подключаение роутера с нашими хэндлерами
     dp.include_router(main_router)
 

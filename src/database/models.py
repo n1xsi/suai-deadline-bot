@@ -16,7 +16,7 @@ class User(Base):
     telegram_id = mapped_column(BigInteger, unique=True, nullable=False)
     username: Mapped[str] = mapped_column(String(32), nullable=True) # username в telegram может отсутствовать
     
-    # Пока без хранения логина/пароля, добавим их позже, когда напишем шифрование 
+    # Пока без хранения логина/пароля, добавим их позже, когда напишем шифрование
     # encrypted_login_lk: Mapped[str] = mapped_column(String(255), nullable=True)
     # encrypted_password_lk: Mapped[str] = mapped_column(String(255), nullable=True)
 
