@@ -10,7 +10,7 @@ import os
 # И скопируйте полученный ключ в ваш .env файл:
 # ENCRYPTION_KEY="СГЕНЕРИРОВАННЫЙ_КЛЮЧ"
 
-# Прочитаем ключ из нашего config файла
+# Прочитаем ключ из config файла
 from src.config import ENCRYPTION_KEY
 
 if not ENCRYPTION_KEY:
