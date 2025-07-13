@@ -4,6 +4,7 @@ from src.database.engine import create_tables
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
 import logging
 
@@ -18,13 +19,20 @@ async def main():
     await create_tables()
 
     # Объект бота
-    bot = Bot(token=BOT_TOKEN)
+    bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
 
     # Диспетчер. Будет принимать апдейты от Telegram и передавать их хэндлерам 
     dp = Dispatcher(storage=MemoryStorage())
     
-    # Подключаение роутера с нашими хэндлерами
+    # Подключаение роутера с хэндлерами
     dp.include_router(main_router)
+    
+    # Инициализиация планировщика
+    scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
+    # scheduler.add_job(...) # Здесь будем добавлять наши задачи
+    
+    # Запуск планировщика
+    scheduler.start()
 
     # Запуск бота
     try:
