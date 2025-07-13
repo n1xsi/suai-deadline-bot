@@ -1,6 +1,7 @@
-from sqlalchemy import select
+from sqlalchemy import select, update
 from src.database.engine import async_session_factory
-from src.database.models import User
+from src.database.models import User, Deadline
+from src.utils.crypto import encrypt_data
 
 async def add_user(telegram_id: int, username: str | None = None):
     """
@@ -18,3 +19,22 @@ async def add_user(telegram_id: int, username: str | None = None):
         session.add(new_user)
         await session.commit()
         return True
+
+async def set_user_credentials(telegram_id: int, login: str, password: str):
+    """Шифрует и сохраняет логин/пароль пользователя в БД."""
+    async with async_session_factory() as session:
+        # Шифруем данные перед записью
+        encrypted_login = encrypt_data(login)
+        encrypted_password = encrypt_data(password)
+
+        # Создаем запрос на обновление
+        query = (
+            update(User)
+            .where(User.telegram_id == telegram_id)
+            .values(
+                encrypted_login_lk=encrypted_login,
+                encrypted_password_lk=encrypted_password
+            )
+        )
+        await session.execute(query)
+        await session.commit()

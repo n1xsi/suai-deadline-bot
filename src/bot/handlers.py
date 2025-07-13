@@ -3,7 +3,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 import asyncio # Понадобится для запуска синхронного парсера в отдельном потоке
 
-from src.database.queries import add_user
+from src.database.queries import add_user, set_user_credentials
 from src.bot.states import Registration
 from src.parser.scraper import parse_deadlines_from_lk
 
@@ -61,10 +61,16 @@ async def process_password(message: types.Message, state: FSMContext):
         return
 
     # Если мы здесь, значит авторизация прошла успешно
+    
+    # Сохраняем учетные данные в БД
+    await set_user_credentials(
+        telegram_id=message.from_user.id,
+        login=login,
+        password=password
+    )
+    
     await state.clear() # Завершаем регистрацию
-    await message.answer("Отлично! Я успешно вошёл в твой личный кабинет.")
-
-    # Здесь в будущем будет код для сохранения дедлайнов и логина/пароля в БД
+    await message.answer("Отлично! Я успешно вошёл в твой личный кабинет и сохранил твои данные.")
     
     if deadlines:
         deadlines_text = "\n\n".join(

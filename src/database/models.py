@@ -12,15 +12,14 @@ class User(Base):
     __tablename__ = 'users' # Название таблицы в БД
 
     # Колонки таблицы
-    id: Mapped[int] = mapped_column(primary_key=True) # Первичный ключ
+    id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id = mapped_column(BigInteger, unique=True, nullable=False)
-    username: Mapped[str] = mapped_column(String(32), nullable=True) # username в telegram может отсутствовать
+    username: Mapped[str] = mapped_column(String(32), nullable=True)
     
-    # Пока без хранения логина/пароля, добавим их позже, когда напишем шифрование
-    # encrypted_login_lk: Mapped[str] = mapped_column(String(255), nullable=True)
-    # encrypted_password_lk: Mapped[str] = mapped_column(String(255), nullable=True)
+    encrypted_login_lk: Mapped[str] = mapped_column(String(255), nullable=True)
+    encrypted_password_lk: Mapped[str] = mapped_column(String(255), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now()) # Дата создания записи
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 # Модель Дедлайна
 class Deadline(Base):
