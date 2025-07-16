@@ -1,6 +1,7 @@
 from src.config import BOT_TOKEN
 from src.bot.handlers import router as main_router
 from src.database.engine import create_tables
+from src.scheduler.tasks import update_all_deadlines, send_deadline_notifications
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -18,18 +19,22 @@ async def main():
     # Перед запуском бота создаём таблицы в БД
     await create_tables()
 
-    # Объект бота
-    bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
+    bot = Bot(token=BOT_TOKEN)
 
-    # Диспетчер. Будет принимать апдейты от Telegram и передавать их хэндлерам 
+    # Диспетчер - будет принимать апдейты от Telegram и передавать их хэндлерам 
     dp = Dispatcher(storage=MemoryStorage())
-    
-    # Подключаение роутера с хэндлерами
     dp.include_router(main_router)
     
     # Инициализиация планировщика
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
-    # scheduler.add_job(...) # Здесь будем добавлять наши задачи
+    
+    # Добавление задачи на обновление дедлайнов ('cron' - запускать в определенное время)
+    # hour=4 - запуск каждый день в 4:00 (ночи)
+    scheduler.add_job(update_all_deadlines, trigger='cron', hour=4, minute=0)
+    
+    # Добавление задачи на отправку уведомлений ('interval' - запускать с интервалом)
+    # hours=3 - запуск каждые 3 часа. bot передается в задачу как аргумент.
+    scheduler.add_job(send_deadline_notifications, trigger='interval', hours=3, args=(bot,))
     
     # Запуск планировщика
     scheduler.start()

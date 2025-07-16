@@ -3,7 +3,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 import asyncio # Понадобится для запуска синхронного парсера в отдельном потоке
 
-from src.database.queries import add_user, set_user_credentials
+from src.database.queries import add_user, set_user_credentials, update_user_deadlines
 from src.bot.states import Registration
 from src.parser.scraper import parse_deadlines_from_lk
 
@@ -70,7 +70,14 @@ async def process_password(message: types.Message, state: FSMContext):
     )
     
     await state.clear() # Завершаем регистрацию
-    await message.answer("Отлично! Я успешно вошёл в твой личный кабинет и сохранил твои данные.")
+    await message.answer(
+        "Отлично! Я успешно вошёл в твой личный кабинет и сохранил твои данные.\n" 
+        "Для безопасности я удалил сообщение с паролем из нашего чата."
+    ) 
+    
+    # Сохраняем найденные дедлайны в БД
+    if deadlines:
+        await update_user_deadlines(message.from_user.id, deadlines)
     
     if deadlines:
         deadlines_text = "\n\n".join(
