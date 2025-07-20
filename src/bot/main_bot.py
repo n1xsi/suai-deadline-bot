@@ -28,9 +28,9 @@ async def main():
     # Инициализиация планировщика
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
     
-    # Добавление задачи на обновление дедлайнов ('cron' - запускать в определенное время)
-    # hour=4 - запуск каждый день в 4:00 (ночи)
-    scheduler.add_job(update_all_deadlines, trigger='cron', hour=4, minute=0)
+    # Добавление задачи на обновление дедлайнов
+    # hours=1 - запуск каждый час.
+    scheduler.add_job(update_all_deadlines, trigger='interval', hour=1)
     
     # Добавление задачи на отправку уведомлений ('interval' - запускать с интервалом)
     # hours=3 - запуск каждые 3 часа. bot передается в задачу как аргумент.
