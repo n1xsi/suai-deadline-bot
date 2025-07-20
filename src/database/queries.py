@@ -105,3 +105,57 @@ async def get_users_with_upcoming_deadlines(days: int):
         )
         result = await session.execute(query)
         return result.all() # Возвращаем пары (User, Deadline)
+
+
+async def get_user_stats(telegram_id: int) -> dict:
+    """Возвращает статистику по пользователю."""
+    async with async_session_factory() as session:
+        user = await get_user_by_telegram_id(telegram_id)
+        if not user:
+            return {}
+
+        # Подсчёт активных дедлайнов
+        query = select(func.count(Deadline.id)).where(
+            Deadline.user_id == user.id,
+            Deadline.due_date >= datetime.now().date()
+        )
+        active_deadlines_count = await session.execute(query)
+        
+        return {
+            "active_deadlines": active_deadlines_count.scalar_one_or_none() or 0,
+            # В будущем можно добавить другие счетчики, например, личных дедлайнов
+        }
+
+async def delete_user_data(telegram_id: int):
+    """Полностью удаляет пользователя и все его данные из БД."""
+    async with async_session_factory() as session:
+        # Находим пользователя, чтобы потом удалить связанные дедлайны по user.id
+        user_query = select(User).where(User.telegram_id == telegram_id)
+        user_result = await session.execute(user_query)
+        user = user_result.scalars().first()
+        
+        if user:
+            # Удаляем сначала связанные дедлайны
+            await session.execute(delete(Deadline).where(Deadline.user_id == user.id))
+            # Затем удаляем самого пользователя
+            await session.execute(delete(User).where(User.telegram_id == telegram_id))
+            await session.commit()
+            return True
+    return False
+
+
+async def get_user_deadlines_from_db(telegram_id: int):
+    """Получает все актуальные дедлайны пользователя из БД."""
+    async with async_session_factory() as session:
+        user = await get_user_by_telegram_id(telegram_id)
+        if not user:
+            return []
+        
+        # Выбираем дедлайны, которые еще не прошли
+        query = (
+            select(Deadline)
+            .where(Deadline.user_id == user.id, Deadline.due_date >= datetime.now().date())
+            .order_by(Deadline.due_date.asc()) # Сортируем по дате
+        )
+        result = await session.execute(query)
+        return result.scalars().all()
