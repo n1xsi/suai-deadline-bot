@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, String, func
+from sqlalchemy import BigInteger, String, Boolean, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from datetime import datetime
@@ -18,6 +18,11 @@ class User(Base):
     
     encrypted_login_lk: Mapped[str] = mapped_column(String(255), nullable=True)
     encrypted_password_lk: Mapped[str] = mapped_column(String(255), nullable=True)
+
+    # По умолчанию уведомления включены
+    notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default='true')
+    # По умолчанию уведомления приходят за 1, 3 и 7 дней до дедлайна
+    notification_days: Mapped[str] = mapped_column(String, default="1,3,7", server_default='1,3,7')
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

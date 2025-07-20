@@ -1,7 +1,12 @@
+from datetime import datetime, timedelta
+
 from aiogram import Bot
 import asyncio
 
-from src.database.queries import get_all_users, update_user_deadlines, get_users_with_upcoming_deadlines
+from src.database.queries import (
+    get_all_users, get_user_deadlines_from_db, update_user_deadlines,
+    get_users_with_upcoming_deadlines
+)
 from src.parser.scraper import parse_deadlines_from_lk
 from src.utils.crypto import decrypt_data
 
@@ -38,29 +43,40 @@ async def update_all_deadlines():
 
 async def send_deadline_notifications(bot: Bot):
     """
-    Задача для отправки уведомлений о дедлайнах.
+    Задача для отправки уведомлений о дедлайнах с учётом настроек пользователя.
     """
     print("SCHEDULER: Запуск задачи отправки уведомлений...")
-    # О каких дедлайнах мы хотим уведомлять (за сколько дней)
-    notification_days = [1, 3, 7]
+    
+    # Получаем только тех пользователей, кто хочет получать уведомления
+    users_to_notify = await get_all_users(only_with_notifications=True)
+    
+    
+    for user in users_to_notify:
+        if not user.notification_days: # Пропускаем, если пользователь отключил все дни
+            continue
 
-    for days_left in notification_days:
-        users_to_notify = await get_users_with_upcoming_deadlines(days=days_left)
+        notification_days_set = set(map(int, user.notification_days.split(',')))
+        user_deadlines = await get_user_deadlines_from_db(user.telegram_id)
         
-        for user, deadline in users_to_notify:
-            text = (
-                f"🔔 <b>Напоминание о дедлайне!</b>\n\n" 
-                f"📚 <b>Предмет:</b> {deadline.course_name}\n" 
-                f"📝 <b>Задание:</b> {deadline.task_name}\n\n"
-                f"🗓️ <u>Осталось дней</u>: <b>{days_left}</b>"
-            )
-            try:
-                await bot.send_message(chat_id=user.telegram_id, text=text, parse_mode="HTML")
-                print(f"SCHEDULER: Отправлено уведомление пользователю {user.telegram_id}.")
-            except Exception as e:
-                # Обработка случая, если бот заблокирован пользователем
-                print(f"SCHEDULER: Не удалось отправить уведомление {user.telegram_id}. Ошибка: {e}")
+        today = datetime.now().date()
+        
+        for deadline in user_deadlines:
+            days_left = (deadline.due_date.date() - today).days
             
-            await asyncio.sleep(1) # Небольшая задержка между отправками
+            if days_left in notification_days_set:
+                text = (
+                    f"🔔 <b>Напоминание о дедлайне!</b>\n\n" 
+                    f"📚 <b>Предмет:</b> {deadline.course_name}\n" 
+                    f"📝 <b>Задание:</b> {deadline.task_name}\n\n"
+                    f"🗓️ <u>Осталось дней</u>: <b>{days_left}</b>"
+                )
+                try:
+                    await bot.send_message(chat_id=user.telegram_id, text=text)
+                    print(f"SCHEDULER: Отправлено уведомление пользователю {user.telegram_id}.")
+                except Exception as e:
+                    # Обработка случая, если бот заблокирован пользователем
+                    print(f"SCHEDULER: Не удалось отправить уведомление {user.telegram_id}. Ошибка: {e}")
+                
+                await asyncio.sleep(1) # Небольшая задержка между отправками
     
     print("SCHEDULER: Задача отправки уведомлений завершена.")

@@ -4,22 +4,22 @@ from aiogram import Router, F, types
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
+from aiogram.exceptions import TelegramBadRequest
 import asyncio
 
+from src.database.models import User
 from src.database.queries import (
     add_user, set_user_credentials, update_user_deadlines, add_custom_deadline,
-    delete_deadline_by_id
+    delete_deadline_by_id, toggle_notifications, update_notification_days,
+    get_user_by_telegram_id, get_user_deadlines_from_db, get_user_stats, delete_user_data
 )
 from src.bot.states import Registration, AddDeadline
 from src.parser.scraper import parse_deadlines_from_lk
 
 from src.bot.keyboards import (
     get_main_menu_keyboard, get_cancel_keyboard, get_profile_keyboard,
-    get_confirm_delete_keyboard, get_deadlines_settings_keyboard
-)
-from src.database.queries import (
-    add_user, set_user_credentials, update_user_deadlines,
-    get_user_deadlines_from_db, get_user_stats, delete_user_data
+    get_confirm_delete_keyboard, get_deadlines_settings_keyboard,
+    get_notification_settings_keyboard
 )
 
 
@@ -73,7 +73,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
         await message.answer(
             "Привет! Я бот для отслеживания дедлайнов ГУАП.\n"
             "Вижу, ты здесь впервые. Давай пройдем регистрацию.\n\n"
-            "[1️⃣/2️⃣] Отправь мне свой логин от личного кабинета.",
+            "[1️⃣/2️⃣] Отправь мне свой логин/почту от личного кабинета.",
             reply_markup=get_cancel_keyboard()
         )
         await state.set_state(Registration.waiting_for_login)
@@ -96,15 +96,16 @@ async def process_password(message: types.Message, state: FSMContext):
     login = user_data.get('login')
     password = message.text
 
-    await message.delete() # Удаляем сообщение с паролем для безопасности
-    await message.answer("Спасибо! Пытаюсь войти в личный кабинет, это может занять минуту...")
+    await message.delete() # Удаление сообщения с паролем (для безопасности)
+    
+    msg_to_delete = await message.answer("Спасибо! Пытаюсь войти в личный кабинет, это может занять минуту...")
 
     # ВАЖНО: Парсер - синхронный (использует requests), а бот - асинхронный.
     # Чтобы не блокировать бота, мы запускаем парсер в отдельном потоке.
     loop = asyncio.get_event_loop()
-    deadlines = await loop.run_in_executor(
-        None, parse_deadlines_from_lk, login, password
-    )
+    deadlines = await loop.run_in_executor(None, parse_deadlines_from_lk, login, password)
+    
+    await msg_to_delete.delete() # Удаление сообщения "Пытаюсь войти..." 
 
     if deadlines is None:
         await message.answer(
@@ -132,11 +133,8 @@ async def process_password(message: types.Message, state: FSMContext):
         reply_markup=get_main_menu_keyboard() 
     ) 
     
-    # Сохраняем найденные дедлайны в БД
     if deadlines:
         await update_user_deadlines(message.from_user.id, deadlines)
-    
-    if deadlines:
         deadlines_text = "\n\n".join(
             [f"📚 <b>{d['subject']}</b>\n"
             f"📝 <b>Задание:</b> {d['task']}\n"
@@ -198,8 +196,35 @@ async def cmd_stop(message: types.Message):
 
 @router.message(F.text == "🔔 Настройка напоминаний")
 async def settings_notifications_menu(message: types.Message):
-    # Тут будет допил, пока заглушка
-    await message.answer("На данный момент уведомления всегда включены и приходят за 1, 3 и 7 дней до дедлайна.")
+    user = await get_user_by_telegram_id(message.from_user.id)
+    if not user:
+        await message.answer("Не удалось найти ваш профиль. Попробуйте /start.")
+        return
+        
+    await message.answer(
+        "Здесь вы можете настроить уведомления:",
+        reply_markup=get_notification_settings_keyboard(user)
+    )
+
+async def update_notification_settings_menu(callback: CallbackQuery):
+    """Вспомогательная функция для обновления меню настроек."""
+    user = await get_user_by_telegram_id(callback.from_user.id)
+    if not user:
+        await callback.answer("Произошла ошибка, не могу найти ваш профиль.")
+        return
+
+    try:
+        await callback.message.edit_reply_markup(
+            reply_markup=get_notification_settings_keyboard(user)
+        )
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e):
+            # Если клавиатура не изменилась, просто подтверждаем нажатие
+            await callback.answer()
+        else:
+            # Если ошибка другая, сообщаем о ней
+            await callback.answer("Произошла ошибка при обновлении.")
+            print(f"Непредвиденная ошибка: {e}")
 
 # Кнопка "Настройка дедлайнов"
 @router.message(F.text == "🛠️ Настройка дедлайнов")
@@ -263,11 +288,22 @@ async def delete_deadline_callback(callback: CallbackQuery):
     )
     await callback.answer(text="Удалено!", show_alert=False)
 
-@router.callback_query(F.data == "back_to_main")
+@router.callback_query(F.data == "back_to_main_from_settings")
 async def back_to_main_menu_callback(callback: CallbackQuery):
     await callback.message.delete() # Удаляем inline-меню
     await show_main_menu(callback.message) # Показываем основное меню
     await callback.answer()
+    
+@router.callback_query(F.data == "toggle_notifications")
+async def toggle_notifications_callback(callback: CallbackQuery):
+    await toggle_notifications(callback.from_user.id)
+    await update_notification_settings_menu(callback)
+
+@router.callback_query(F.data.startswith("toggle_day_"))
+async def toggle_day_callback(callback: CallbackQuery):
+    day = int(callback.data.split("_")[2])
+    await update_notification_days(callback.from_user.id, day)
+    await update_notification_settings_menu(callback)
 
 
 

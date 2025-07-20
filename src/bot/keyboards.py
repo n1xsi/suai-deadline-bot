@@ -1,8 +1,10 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from src.database.models import User # Модель User для тайп-хинтинга
+
 def get_main_menu_keyboard():
-    """Создает клавиатуру главного меню."""
+    """Создаёт клавиатуру главного меню."""
     buttons = [
         [KeyboardButton(text="🚨 Посмотреть дедлайны")],
         [
@@ -15,13 +17,13 @@ def get_main_menu_keyboard():
     return keyboard
 
 def get_profile_keyboard():
-    """Создает inline-клавиатуру для меню 'Мой профиль'."""
+    """Создаёт inline-клавиатуру для меню 'Мой профиль'."""
     builder = InlineKeyboardBuilder()
     builder.button(text="🗑️ Удалить все мои данные", callback_data="delete_my_data")
     return builder.as_markup()
 
 def get_confirm_delete_keyboard():
-    """Создает inline-клавиатуру для подтверждения удаления."""
+    """Создаёт inline-клавиатуру для подтверждения удаления."""
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Да, удалить", callback_data="confirm_delete")
     builder.button(text="❌ Нет, оставить", callback_data="cancel_delete")
@@ -33,10 +35,9 @@ def get_cancel_keyboard():
     keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
     return keyboard
 
-
 def get_deadlines_settings_keyboard(deadlines: list):
     """
-    Создает клавиатуру для управления дедлайнами.
+    Создаёт клавиатуру для управления дедлайнами.
     Каждый дедлайн - это кнопка для его удаления.
     """
     builder = InlineKeyboardBuilder()
@@ -49,10 +50,33 @@ def get_deadlines_settings_keyboard(deadlines: list):
             )
     
     # Кнопка для добавления нового дедлайна
-    builder.button(text="➕ Добавить дедлайн вручную", callback_data="add_deadline")
+    builder.button(text="➕ Добавить собственный дедлайн", callback_data="add_deadline")
     # Кнопка для возврата в главное меню
-    builder.button(text="⬅️ Назад в меню", callback_data="back_to_main")
+    builder.button(text="⬅️ Назад", callback_data="back_to_main_from_settings")
     
     # Выстраиваем кнопки: по одной на дедлайн, и две последних в ряд
     builder.adjust(*([1] * len(deadlines)), 1, 1)
+    return builder.as_markup()
+
+def get_notification_settings_keyboard(user: User):
+    """Создаёт клавиатуру настроек уведомлений на основе данных пользователя."""
+    builder = InlineKeyboardBuilder()
+
+    # Кнопка включения/выключения
+    status_text = "✅ Включены" if user.notifications_enabled else "❌ Выключены"
+    builder.button(text=f"Напоминания: {status_text}", callback_data="toggle_notifications")
+    
+    # Кнопки для дней уведомлений
+    user_days = set(map(int, user.notification_days.split(','))) if user.notification_days else set()
+    possible_days = [1, 3, 7] # Дни, которые можно настроить
+    
+    day_buttons = []
+    for day in possible_days:
+        text = f"✅ {day} д." if day in user_days else f"🔲 {day} д."
+        day_buttons.append(InlineKeyboardButton(text=text, callback_data=f"toggle_day_{day}"))
+    
+    # Добавляем ряд с кнопками дней
+    builder.row(*day_buttons)
+    
+    builder.button(text="⬅️ Назад", callback_data="back_to_main_from_settings")
     return builder.as_markup()
