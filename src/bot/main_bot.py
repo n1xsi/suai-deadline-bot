@@ -6,43 +6,43 @@ from src.scheduler.tasks import update_all_deadlines, send_deadline_notification
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 import asyncio
 import logging
+
 
 async def main():
     """
     Основная функция, которая запускает бота
     """
-    # Логирование, чтобы видеть информацию о работе бота в консоли 
+    # Логирование, чтобы видеть информацию о работе бота в консоли
     logging.basicConfig(level=logging.INFO)
-    
-    # Перед запуском бота создаём таблицы в БД
+
+    # Создание таблиц в БД перед запуском бота
     await create_tables()
 
+    # Инициализация бота с токеном
     bot = Bot(token=BOT_TOKEN)
 
-    # Диспетчер - будет принимать апдейты от Telegram и передавать их хэндлерам 
+    # Диспетчер - будет принимать апдейты от Telegram и передавать их хэндлерам
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(main_router)
-    
+
     # Инициализиация планировщика
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
-    
-    # Добавление задачи на обновление дедлайнов
-    # hours=1 - запуск каждый час.
-    scheduler.add_job(update_all_deadlines, trigger='interval', hour=1)
-    
+
+    # Добавление задачи на обновление дедлайнов ('interval' - запускать с интервалом)
+    scheduler.add_job(update_all_deadlines, trigger='interval', hours=1)
+
     # Добавление задачи на отправку уведомлений ('interval' - запускать с интервалом)
-    # hours=3 - запуск каждые 3 часа. bot передается в задачу как аргумент.
     scheduler.add_job(send_deadline_notifications, trigger='interval', hours=3, args=(bot,))
-    
+
     """
     ### Тест системы уведомлений
     await asyncio.sleep(2) 
     await send_deadline_notifications(bot)
     """
-    
-    
+
     # Запуск планировщика
     scheduler.start()
 
