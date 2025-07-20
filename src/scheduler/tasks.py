@@ -71,7 +71,7 @@ async def send_deadline_notifications(bot: Bot):
                     f"🗓️ <u>Осталось дней</u>: <b>{days_left}</b>"
                 )
                 try:
-                    await bot.send_message(chat_id=user.telegram_id, text=text)
+                    await bot.send_message(chat_id=user.telegram_id, text=text, parse_mode="HTML")
                     print(f"SCHEDULER: Отправлено уведомление пользователю {user.telegram_id}.")
                 except Exception as e:
                     # Обработка случая, если бот заблокирован пользователем

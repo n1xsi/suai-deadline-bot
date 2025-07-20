@@ -36,6 +36,13 @@ async def main():
     # hours=3 - запуск каждые 3 часа. bot передается в задачу как аргумент.
     scheduler.add_job(send_deadline_notifications, trigger='interval', hours=3, args=(bot,))
     
+    """
+    ### Тест системы уведомлений
+    await asyncio.sleep(2) 
+    await send_deadline_notifications(bot)
+    """
+    
+    
     # Запуск планировщика
     scheduler.start()
 
