@@ -1,18 +1,27 @@
+from datetime import datetime
+
 from aiogram import Router, F, types
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 import asyncio
 
-from src.database.queries import add_user, set_user_credentials, update_user_deadlines
-from src.bot.states import Registration
+from src.database.queries import (
+    add_user, set_user_credentials, update_user_deadlines, add_custom_deadline,
+    delete_deadline_by_id
+)
+from src.bot.states import Registration, AddDeadline
 from src.parser.scraper import parse_deadlines_from_lk
 
-from src.bot.keyboards import get_main_menu_keyboard, get_cancel_keyboard, get_profile_keyboard, get_confirm_delete_keyboard
+from src.bot.keyboards import (
+    get_main_menu_keyboard, get_cancel_keyboard, get_profile_keyboard,
+    get_confirm_delete_keyboard, get_deadlines_settings_keyboard
+)
 from src.database.queries import (
     add_user, set_user_credentials, update_user_deadlines,
     get_user_deadlines_from_db, get_user_stats, delete_user_data
 )
+
 
 # Создание роутера (нужны, чтобы разбивать логику по файлам)
 router = Router()
@@ -138,6 +147,7 @@ async def process_password(message: types.Message, state: FSMContext):
         await message.answer("Пока что я не нашел активных дедлайнов.")
         
 
+
 ### Основные команды меню
 
 # Команда /status и кнопка "Посмотреть дедлайны"
@@ -186,6 +196,22 @@ async def cmd_stop(message: types.Message):
         parse_mode="HTML"
     )
 
+@router.message(F.text == "🔔 Настройка напоминаний")
+async def settings_notifications_menu(message: types.Message):
+    # Тут будет допил, пока заглушка
+    await message.answer("На данный момент уведомления всегда включены и приходят за 1, 3 и 7 дней до дедлайна.")
+
+# Кнопка "Настройка дедлайнов"
+@router.message(F.text == "🛠️ Настройка дедлайнов")
+async def settings_deadlines_menu(message: types.Message):
+    deadlines = await get_user_deadlines_from_db(message.from_user.id)
+    await message.answer(
+        "Здесь вы можете управлять своими дедлайнами. Нажмите на дедлайн, чтобы удалить его.",
+        reply_markup=get_deadlines_settings_keyboard(deadlines)
+    )
+
+
+
 ### Обработчики Callback'ов (нажатий на inline-кнопки)
 
 @router.callback_query(F.data == "delete_my_data")
@@ -223,5 +249,65 @@ async def on_cancel_delete(callback: CallbackQuery):
     await callback.message.edit_text("Удаление отменено.", reply_markup=None)
     await callback.answer()
 
-# Остальные хэндлеры (help, FSM) можно оставить как есть, но нужно убедиться,
-# что они возвращают правильное меню - get_main_menu_keyboard()
+@router.callback_query(F.data.startswith("del_deadline_"))
+async def delete_deadline_callback(callback: CallbackQuery):
+    # Извлекаем ID дедлайна из callback_data
+    deadline_id = int(callback.data.split("_")[2])
+    await delete_deadline_by_id(deadline_id)
+    
+    # Обновляем сообщение, показывая обновленный список
+    deadlines = await get_user_deadlines_from_db(callback.from_user.id)
+    await callback.message.edit_text(
+        "Дедлайн удален. Вот обновленный список:",
+        reply_markup=get_deadlines_settings_keyboard(deadlines)
+    )
+    await callback.answer(text="Удалено!", show_alert=False)
+
+@router.callback_query(F.data == "back_to_main")
+async def back_to_main_menu_callback(callback: CallbackQuery):
+    await callback.message.delete() # Удаляем inline-меню
+    await show_main_menu(callback.message) # Показываем основное меню
+    await callback.answer()
+
+
+
+### FSM для добавления нового дедлайна
+
+@router.callback_query(F.data == "add_deadline")
+async def add_deadline_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text("Хорошо. Введите название предмета:")
+    await state.set_state(AddDeadline.waiting_for_course_name)
+    await callback.answer()
+
+@router.message(AddDeadline.waiting_for_course_name, F.text)
+async def add_deadline_course(message: types.Message, state: FSMContext):
+    await state.update_data(course_name=message.text)
+    await message.answer("Отлично. Теперь введите название задания:")
+    await state.set_state(AddDeadline.waiting_for_task_name)
+
+@router.message(AddDeadline.waiting_for_task_name, F.text)
+async def add_deadline_task(message: types.Message, state: FSMContext):
+    await state.update_data(task_name=message.text)
+    await message.answer("Принято. Теперь введите дату сдачи в формате ДД.ММ.ГГГГ (например, 25.12.2025):")
+    await state.set_state(AddDeadline.waiting_for_due_date)
+
+@router.message(AddDeadline.waiting_for_due_date, F.text)
+async def add_deadline_date(message: types.Message, state: FSMContext):
+    try:
+        # Попытка преобразовать введённый текст в дату
+        due_date = datetime.strptime(message.text, "%d.%m.%Y")
+    except ValueError:
+        await message.answer("Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:")
+        return
+
+    user_data = await state.get_data()
+    await add_custom_deadline(
+        telegram_id=message.from_user.id,
+        course=user_data.get("course_name"),
+        task=user_data.get("task_name"),
+        due_date=due_date
+    )
+    
+    await state.clear()
+    await message.answer("✅ Новый дедлайн успешно добавлен!")
+    await show_main_menu(message)

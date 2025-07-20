@@ -159,3 +159,28 @@ async def get_user_deadlines_from_db(telegram_id: int):
         )
         result = await session.execute(query)
         return result.scalars().all()
+
+
+async def add_custom_deadline(telegram_id: int, course: str, task: str, due_date: datetime):
+    """Добавляет один личный дедлайн для пользователя."""
+    async with async_session_factory() as session:
+        user = await get_user_by_telegram_id(telegram_id)
+        if not user:
+            return None
+        
+        new_deadline = Deadline(
+            user_id=user.id,
+            course_name=course,
+            task_name=task,
+            due_date=due_date
+        )
+        session.add(new_deadline)
+        await session.commit()
+        return new_deadline
+
+async def delete_deadline_by_id(deadline_id: int):
+    """Удаляет дедлайн по его ID."""
+    async with async_session_factory() as session:
+        query = delete(Deadline).where(Deadline.id == deadline_id)
+        await session.execute(query)
+        await session.commit()
