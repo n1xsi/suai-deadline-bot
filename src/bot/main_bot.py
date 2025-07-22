@@ -34,7 +34,7 @@ async def main():
     # Добавление задачи на обновление дедлайнов ('interval' - запускать с интервалом)
     scheduler.add_job(update_all_deadlines, trigger='interval', hours=1)
 
-    # Добавление задачи на отправку уведомлений ('interval' - запускать с интервалом)
+    # Добавление задачи на отправку уведомлений
     scheduler.add_job(send_deadline_notifications, trigger='interval', hours=3, args=(bot,))
 
     """

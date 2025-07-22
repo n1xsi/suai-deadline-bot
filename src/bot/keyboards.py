@@ -75,7 +75,7 @@ def get_notification_settings_keyboard(user: User):
 
     day_buttons = []
     for day in possible_days:
-        text = f"✅ {day} д." if day in user_days else f"🔲 {day} д."
+        text = f"✅ за {day} д." if day in user_days else f"🔕 за {day} д."
         day_buttons.append(InlineKeyboardButton(
             text=text, callback_data=f"toggle_day_{day}"))
 

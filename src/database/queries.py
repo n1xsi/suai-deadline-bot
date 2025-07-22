@@ -81,7 +81,6 @@ async def update_user_deadlines(telegram_id: int, new_deadlines: list[dict]):
             try:
                 due_date_obj = datetime.strptime(d['due_date'], "%d.%m.%Y")
             except ValueError:
-                # Пропуск дедлайна, если формат даты некорректный
                 continue
 
             deadline_objects.append(
@@ -161,7 +160,7 @@ async def get_user_deadlines_from_db(telegram_id: int):
         query = (
             select(Deadline)
             .where(Deadline.user_id == user.id, Deadline.due_date >= datetime.now().date())
-            .order_by(Deadline.due_date.asc())  # Сортировка по дате
+            .order_by(Deadline.due_date.asc())
         )
         result = await session.execute(query)
         return result.scalars().all()

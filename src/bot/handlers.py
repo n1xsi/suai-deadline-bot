@@ -157,7 +157,7 @@ async def show_deadlines(message: types.Message):
     deadlines = await get_user_deadlines_from_db(message.from_user.id)
     if not deadlines:
         await message.answer(
-            "🕳 У вас пока нет предстоящих дедлайнов в базе. "
+            "🕳 У вас пока нет предстоящих дедлайнов в базе. \n"
             "⏰ Обновление происходит автоматически <u>раз в час</u>.",
             parse_mode="HTML")
         return
