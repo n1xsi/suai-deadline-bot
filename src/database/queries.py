@@ -63,36 +63,63 @@ async def get_user_by_telegram_id(telegram_id: int):
         return result.scalars().first()
 
 
-async def update_user_deadlines(telegram_id: int, new_deadlines: list[dict]):
-    """Удаляет все старые дедлайны пользователя и записывает новые."""
+async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dict]):
+    """
+    "Умно" синхронизирует дедлайны из парсера с базой данных.
+    Не трогает дедлайны, добавленные вручную.
+    """
     async with async_session_factory() as session:
         user = await get_user_by_telegram_id(telegram_id)
         if not user:
             return
+
+        # Поиск всех существующих "парсерных" дедлайнов из БД
+        existing_deadlines_query = await session.execute(
+            select(Deadline).where(Deadline.user_id == user.id, Deadline.is_custom == False)
+        )
+        existing_deadlines_list = existing_deadlines_query.scalars().all()
         
-        # Удаляение старых дедлайнов
-        await session.execute(delete(Deadline).where(Deadline.user_id == user.id))
+        # Создание множества существующих дедлайнов для быстрой проверки (ключ - предмет+задание)
+        existing_deadlines_set = {
+            (d.course_name, d.task_name): d for d in existing_deadlines_list
+        }
 
-        # Добавляение новых
-        deadline_objects = []
-        for d in new_deadlines:
-            # Преобразование строки с датой в объект datetime
-            # Формат даты в ЛК: "ДД.ММ.ГГГГ".
-            try:
-                due_date_obj = datetime.strptime(d['due_date'], "%d.%m.%Y")
-            except ValueError:
-                continue
+        # Создание множества новых дедлайнов из парсера
+        parsed_deadlines_set = {
+            (d['subject'], d['task']): d for d in new_parsed_deadlines
+        }
 
-            deadline_objects.append(
-                Deadline(
-                    user_id=user.id,
-                    course_name=d['subject'],
-                    task_name=d['task'],
-                    due_date=due_date_obj
+        # Поиск дедлайнов, которые нужно УДАЛИТЬ
+        # (те, что есть в БД, но которых нет в новом списке из парсера)
+        to_delete_ids = [
+            existing_deadlines_set[key].id
+            for key in existing_deadlines_set
+            if key not in parsed_deadlines_set
+        ]
+        if to_delete_ids:
+            await session.execute(delete(Deadline).where(Deadline.id.in_(to_delete_ids)))
+
+        # Поиск дедлайнов, которые нужно ДОБАВИТЬ
+        # (те, что есть в новом списке, но которых нет в БД)
+        to_add_objects = []
+        for key, data in parsed_deadlines_set.items():
+            if key not in existing_deadlines_set:
+                try:
+                    due_date_obj = datetime.strptime(data['due_date'], "%d.%m.%Y")
+                except ValueError:
+                    continue
+                to_add_objects.append(
+                    Deadline(
+                        user_id=user.id,
+                        course_name=data['subject'],
+                        task_name=data['task'],
+                        due_date=due_date_obj,
+                        is_custom=False
+                    )
                 )
-            )
+        if to_add_objects:
+            session.add_all(to_add_objects)
 
-        session.add_all(deadline_objects)
         await session.commit()
 
 
@@ -177,7 +204,8 @@ async def add_custom_deadline(telegram_id: int, course: str, task: str, due_date
             user_id=user.id,
             course_name=course,
             task_name=task,
-            due_date=due_date
+            due_date=due_date,
+            is_custom=True
         )
         session.add(new_deadline)
         await session.commit()

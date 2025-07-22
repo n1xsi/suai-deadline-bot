@@ -36,3 +36,5 @@ class Deadline(Base):
     course_name: Mapped[str] = mapped_column(String(100), nullable=False)
     task_name: Mapped[str] = mapped_column(String(255), nullable=False)
     due_date: Mapped[datetime] = mapped_column(nullable=False)
+
+    is_custom: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false')

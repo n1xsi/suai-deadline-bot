@@ -21,8 +21,8 @@ from src.bot.keyboards import (
     get_notification_settings_keyboard
 )
 
-
-# Создание роутера (разбиение логики по файлам)
+# Создание роутера (нужен для организации хэндлеров)
+# Хендлер - это функция, которая обрабатывает входящие сообщения и команды.
 router = Router()
 
 
@@ -105,11 +105,11 @@ async def process_password(message: types.Message, state: FSMContext):
     # Парсер - синхронный (использует requests), а бот - асинхронный.
     # Поэтому запуск парсера происходит в отдельном потоке, чтобы не блокировать бота.
     loop = asyncio.get_event_loop()
-    deadlines = await loop.run_in_executor(None, parse_deadlines_from_lk, login, password)
+    new_parsed_deadlines = await loop.run_in_executor(None, parse_deadlines_from_lk, login, password)
 
     await msg_to_delete.delete()  # Удаление сообщения "Пытаюсь войти..."
 
-    if deadlines is None:
+    if new_parsed_deadlines is None:
         await message.answer(
             "⛔ Не удалось войти. Скорее всего, логин и/или пароль неверны.\n"
             "🥴 Пожалуйста, попробуй еще раз. Введи логин.",
@@ -136,14 +136,14 @@ async def process_password(message: types.Message, state: FSMContext):
         reply_markup=get_main_menu_keyboard()
     )
 
-    if deadlines:
-        await update_user_deadlines(message.from_user.id, deadlines)
+    if new_parsed_deadlines:
+        await update_user_deadlines(message.from_user.id, new_parsed_deadlines)
         deadlines_text = "\n\n".join(
             [f"📚 <b>{d['subject']}</b>\n"
              f"📝 <b>Задание:</b> {d['task']}\n"
-             f"🗓️ <b>Срок сдачи:</b> {d['due_date']}" for d in deadlines]
+             f"🗓️ <b>Срок сдачи:</b> {d['due_date']}" for d in new_parsed_deadlines]
         )
-        await message.answer(f"Вот что я нашел:\n\n{deadlines_text}", parse_mode="HTML")
+        await message.answer(f"Вот, что я нашёл:\n\n{deadlines_text}", parse_mode="HTML")
     else:
         await message.answer("Пока что я не нашел активных дедлайнов.")
 
@@ -232,7 +232,7 @@ async def update_notification_settings_menu(callback: CallbackQuery):
 async def settings_deadlines_menu(message: types.Message):
     deadlines = await get_user_deadlines_from_db(message.from_user.id)
     await message.answer(
-        "Здесь вы можете управлять своими дедлайнами. Нажмите на дедлайн, чтобы удалить его.",
+        "Здесь вы можете управлять своими дедлайнами - добавлять новые или удалять уже готовые.",
         reply_markup=get_deadlines_settings_keyboard(deadlines)
     )
 
@@ -314,7 +314,7 @@ async def toggle_day_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "add_deadline")
 async def add_deadline_start(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("Хорошо. Введите название предмета:")
+    await callback.message.edit_text("[1️⃣/3️⃣] Введите название предмета:")
     await state.set_state(AddDeadline.waiting_for_course_name)
     await callback.answer()
 
@@ -322,14 +322,14 @@ async def add_deadline_start(callback: CallbackQuery, state: FSMContext):
 @router.message(AddDeadline.waiting_for_course_name, F.text)
 async def add_deadline_course(message: types.Message, state: FSMContext):
     await state.update_data(course_name=message.text)
-    await message.answer("Отлично. Теперь введите название задания:")
+    await message.answer("[2️⃣/3️⃣] Теперь введите название задания:")
     await state.set_state(AddDeadline.waiting_for_task_name)
 
 
 @router.message(AddDeadline.waiting_for_task_name, F.text)
 async def add_deadline_task(message: types.Message, state: FSMContext):
     await state.update_data(task_name=message.text)
-    await message.answer("Принято. Теперь введите дату сдачи в формате ДД.ММ.ГГГГ (например, 25.12.2025):")
+    await message.answer("[3️⃣/3️⃣] Теперь введите дату сдачи в формате ДД.ММ.ГГГГ (например, 25.12.2025):")
     await state.set_state(AddDeadline.waiting_for_due_date)
 
 
