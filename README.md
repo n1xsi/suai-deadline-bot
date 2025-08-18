@@ -2,7 +2,7 @@
 Учебный проект: Telegram-бот на Python, который автоматически отслеживает личный кабинет студента ГУАП и напоминает о предстоящих дедлайнах сдачи работ.
 
 <p align="center">
-    <img src="http://postimg.su/image/9OEIElCR/logo-transformed.png">
+    <img src="resources/images/logo.png">
 </p>
 
 Архитектура проекта:
