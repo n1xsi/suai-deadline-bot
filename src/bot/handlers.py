@@ -12,7 +12,7 @@ from src.database.queries import (
     add_user, set_user_credentials, update_user_deadlines, add_custom_deadline,
     delete_deadline_by_id, toggle_notifications, update_notification_days,
     get_user_by_telegram_id, get_user_deadlines_from_db, get_user_stats, 
-    delete_user_data, set_notification_interval 
+    delete_user_data, set_notification_interval, get_deadline_by_id
 )
 from src.bot.states import Registration, AddDeadline, SetNotificationInterval
 from src.parser.scraper import parse_deadlines_from_lk
@@ -20,7 +20,7 @@ from src.parser.scraper import parse_deadlines_from_lk
 from src.bot.keyboards import (
     get_main_menu_keyboard, get_cancel_keyboard, get_profile_keyboard,
     get_confirm_delete_keyboard, get_deadlines_settings_keyboard,
-    get_notification_settings_keyboard
+    get_notification_settings_keyboard, get_confirm_delete_deadline_keyboard
 )
 
 import asyncio
@@ -282,16 +282,66 @@ async def on_cancel_delete(callback: CallbackQuery):
 
 
 @router.callback_query(F.data.startswith("del_deadline_"))
-async def delete_deadline_callback(callback: CallbackQuery):
+async def delete_deadline_confirm_callback(callback: CallbackQuery):
+    """
+    Этот хэндлер запрашивает подтверждение на удаление дедлайна.
+    """
+    # Извлекаем ID дедлайна из callback_data
     deadline_id = int(callback.data.split("_")[2])
-    await delete_deadline_by_id(deadline_id)
+    
+    # Получаем информацию о дедлайне из БД
+    deadline = await get_deadline_by_id(deadline_id)
+    
+    if not deadline:
+        await callback.answer("Этот дедлайн уже удален.", show_alert=True)
+        return
+    
+    # Формируем информативное сообщение
+    text = (
+        f"Вы уверены, что хотите удалить дедлайн?\n\n"
+        f"📚 <b>{deadline.course_name}</b>\n"
+        f"📝 {deadline.task_name}\n"
+        f"🗓️ {deadline.due_date.strftime('%d.%m.%Y')}"
+    )
+    
+    # Редактируем сообщение, добавляя клавиатуру подтверждения
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_confirm_delete_deadline_keyboard(deadline_id),
+        parse_mode="HTML"
+    )
+    await callback.answer()
 
+
+@router.callback_query(F.data.startswith("confirm_del_deadline_"))
+async def confirm_delete_deadline_callback(callback: CallbackQuery):
+    """
+    Этот хэндлер срабатывает при подтверждении и окончательно удаляет дедлайн.
+    """
+    deadline_id = int(callback.data.split("_")[3])
+    await delete_deadline_by_id(deadline_id)
+    
+    # Обновляем исходное меню настроек, чтобы показать, что дедлайн исчез
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
     await callback.message.edit_text(
         "🚮 Дедлайн удален. Вот обновленный список:",
         reply_markup=get_deadlines_settings_keyboard(deadlines)
     )
     await callback.answer(text="Удалено!", show_alert=False)
+
+
+@router.callback_query(F.data == "cancel_del_deadline")
+async def cancel_delete_deadline_callback(callback: CallbackQuery):
+    """
+    Этот хэндлер срабатывает при отмене удаления, возвращая пользователя
+    в меню настроек дедлайнов.
+    """
+    deadlines = await get_user_deadlines_from_db(callback.from_user.id)
+    await callback.message.edit_text(
+        "❕ Удаление отменено. Вы снова в меню управления дедлайнами.",
+        reply_markup=get_deadlines_settings_keyboard(deadlines)
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data == "back_to_main_from_settings")

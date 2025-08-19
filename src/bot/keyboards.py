@@ -90,3 +90,11 @@ def get_notification_settings_keyboard(user: User):
     # Кнопка для возврата в главное меню
     builder.button(text="⬅️ Назад", callback_data="back_to_main_from_settings")
     return builder.as_markup()
+
+def get_confirm_delete_deadline_keyboard(deadline_id: int):
+    """Создаёт inline-клавиатуру для подтверждения удаления дедлайна."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Да, удалить", callback_data=f"confirm_del_deadline_{deadline_id}")
+    builder.button(text="❌ Нет, оставить", callback_data="cancel_del_deadline")
+    builder.adjust(2)
+    return builder.as_markup()

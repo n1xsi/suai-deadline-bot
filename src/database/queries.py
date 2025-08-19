@@ -210,6 +210,14 @@ async def add_custom_deadline(telegram_id: int, course: str, task: str, due_date
         session.add(new_deadline)
         await session.commit()
         return new_deadline
+    
+
+async def get_deadline_by_id(deadline_id: int):
+    """Возвращает объект дедлайна по его ID."""
+    async with async_session_factory() as session:
+        query = select(Deadline).where(Deadline.id == deadline_id)
+        result = await session.execute(query)
+        return result.scalars().first()
 
 
 async def delete_deadline_by_id(deadline_id: int):
