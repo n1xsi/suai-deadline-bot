@@ -205,7 +205,7 @@ async def settings_notifications_menu(message: types.Message):
         return
 
     await message.answer(
-        "Здесь вы можете настроить уведомления:",
+        "🔔 Здесь вы можете настроить уведомления:",
         reply_markup=get_notification_settings_keyboard(user)
     )
 
@@ -233,7 +233,7 @@ async def update_notification_settings_menu(callback: CallbackQuery):
 async def settings_deadlines_menu(message: types.Message):
     deadlines = await get_user_deadlines_from_db(message.from_user.id)
     await message.answer(
-        "Здесь вы можете управлять своими дедлайнами - добавлять новые или удалять уже готовые.",
+        "🔧 Здесь вы можете управлять дедлайнами:\nдобавлять собственные или удалять уже имеющиеся.",
         reply_markup=get_deadlines_settings_keyboard(deadlines)
     )
 
@@ -317,7 +317,7 @@ async def set_interval_start(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "✍ Введите интервал в часах для частых уведомлений:\n"
         "каждые <u>сколько часов</u> будет отправляться уведомление.\n\n"
-        "<i>Или введите <b>0</b>, чтобы отключить частые уведомления</i>.",
+        "<i>Или введите <b>0</b>, чтобы отключить частые уведомления</i>:",
         parse_mode="HTML"
     )
     await state.set_state(SetNotificationInterval.waiting_for_hours)
