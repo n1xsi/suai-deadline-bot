@@ -44,4 +44,4 @@ suai-deadline-bot/
     └── config.py          # Файл для хранения настроек (токен бота, данные для БД)
 ```
 
-Special thanks: @f0rgenet - most important back-end help🙏
+Special thanks: [@f0rgenet](https://github.com/f0rgenet) - most important back-end help🙏
