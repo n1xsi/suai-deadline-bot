@@ -19,6 +19,7 @@ async def set_main_menu_commands(bot: Bot):
     # Создаем список команд с описаниями
     main_menu_commands = [
         BotCommand(command="/start", description="Запустить/перезапустить бота"),
+        BotCommand(command="/add", description="Добавить дедлайн вручную"),
         BotCommand(command="/status", description="Показать актуальные дедлайны"),
         BotCommand(command="/help", description="Справка по работе бота"),
         BotCommand(command="/cancel", description="Отменить текущее действие"),

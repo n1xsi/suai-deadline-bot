@@ -5,7 +5,8 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
-import asyncio
+
+from typing import Union
 
 from src.database.queries import (
     add_user, set_user_credentials, update_user_deadlines, add_custom_deadline,
@@ -21,6 +22,8 @@ from src.bot.keyboards import (
     get_confirm_delete_keyboard, get_deadlines_settings_keyboard,
     get_notification_settings_keyboard
 )
+
+import asyncio
 
 # Создание роутера (нужен для организации хэндлеров)
 # Хендлер - это функция, которая обрабатывает входящие сообщения и команды.
@@ -346,11 +349,27 @@ async def set_interval_hours(message: types.Message, state: FSMContext):
 
 ### FSM для добавления нового дедлайна
 
+@router.message(Command("add"))
 @router.callback_query(F.data == "add_deadline")
-async def add_deadline_start(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("[1️⃣/3️⃣] Введите название предмета:")
+async def add_deadline_start(event: Union[types.Message, CallbackQuery], state: FSMContext):
+    """
+    Универсальный хэндлер для начала добавления дедлайна.
+    Срабатывает как на команду /add, так и на нажатие inline-кнопки.
+    """
+    text = "[1️⃣/3️⃣] Введите название предмета:"
+    
+    # Проверяем, как была вызвана функция
+    if isinstance(event, types.Message):
+        # Если через команду /add, то отправляем новое сообщение
+        await event.answer(text, reply_markup=get_cancel_keyboard())
+    elif isinstance(event, CallbackQuery):
+        # Если через кнопку, то редактируем существующее сообщение
+        await event.message.edit_text(text)
+        # И обязательно отвечаем на callback, чтобы убрать "часики"
+        await event.answer()
+        
+    # Устанавливаем состояние в любом случае
     await state.set_state(AddDeadline.waiting_for_course_name)
-    await callback.answer()
 
 
 @router.message(AddDeadline.waiting_for_course_name, F.text)
