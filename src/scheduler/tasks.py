@@ -47,36 +47,49 @@ async def send_deadline_notifications(bot: Bot):
     Задача для отправки уведомлений о дедлайнах с учётом настроек пользователя.
     """
     print("SCHEDULER: Запуск задачи отправки уведомлений...")
+    current_hour = datetime.now().hour
 
     # Поиск только тех пользователей, кто хочет получать уведомления
     users_to_notify = await get_all_users(only_with_notifications=True)
 
     for user in users_to_notify:
-        if not user.notification_days:  # Пропуск, если пользователь отключил все дни
+        notification_sent_this_run = False
+        user_deadlines = await get_user_deadlines_from_db(user.telegram_id)
+        if not user_deadlines:
             continue
 
-        notification_days_set = set(map(int, user.notification_days.split(',')))
-        user_deadlines = await get_user_deadlines_from_db(user.telegram_id)
+        # Логика для ЕЖЕДНЕВНЫХ уведомлений
+        if user.notification_days and current_hour == 9: # Отправляем ежедневные в 9:00
+            notification_days_set = set(map(int, user.notification_days.split(',')))
+            today = datetime.now().date()
+            for deadline in user_deadlines:
+                days_left = (deadline.due_date.date() - today).days
+                if days_left in notification_days_set:
+                    text = (
+                        f"🔔 <b>Напоминание о дедлайне!</b>\n\n"
+                        f"📚 <b>Предмет:</b> {deadline.course_name}\n"
+                        f"📝 <b>Задание:</b> {deadline.task_name}\n\n"
+                        f"🗓️ <u>Осталось дней</u>: <b>{days_left}</b>"
+                    )
+                    try:
+                        await bot.send_message(chat_id=user.telegram_id, text=text, parse_mode="HTML")
+                        print(f"SCHEDULER: Отправлено ЕЖЕДНЕВНОЕ уведомление пользователю {user.telegram_id}.")
+                        notification_sent_this_run = True
+                        break # Отправляем только одно ежедневное уведомление за раз
+                    except Exception as e:
+                        print(f"SCHEDULER: Не удалось отправить уведомление {user.telegram_id}. Ошибка: {e}")
 
-        today = datetime.now().date()
-
-        for deadline in user_deadlines:
-            days_left = (deadline.due_date.date() - today).days
-
-            if days_left in notification_days_set:
-                text = (
-                    f"🔔 <b>Напоминание о дедлайне!</b>\n\n"
-                    f"📚 <b>Предмет:</b> {deadline.course_name}\n"
-                    f"📝 <b>Задание:</b> {deadline.task_name}\n\n"
-                    f"🗓️ <u>Осталось дней</u>: <b>{days_left}</b>"
-                )
-                try:
-                    await bot.send_message(chat_id=user.telegram_id, text=text, parse_mode="HTML")
-                    print(f"SCHEDULER: Отправлено уведомление пользователю {user.telegram_id}.")
-                except Exception as e:
-                    # Обработка случая, если бот заблокирован пользователем
-                    print(f"SCHEDULER: Не удалось отправить уведомление {user.telegram_id}. Ошибка: {e}")
-
-                await asyncio.sleep(1)  # Небольшая задержка между отправками
-
+        # Логика для ЧАСТЫХ (часовых) уведомлений
+        interval = user.notification_interval_hours
+        if interval > 0 and current_hour % interval == 0 and not notification_sent_this_run:
+            deadlines_text = "⏰ <b>Часовое напоминание!</b>\n\nВаши активные дедлайны:\n\n"
+            for d in user_deadlines:
+                deadlines_text += f"▪️ {d.course_name}: {d.task_name} (до {d.due_date.strftime('%d.%m')})\n"
+            try:
+                await bot.send_message(chat_id=user.telegram_id, text=deadlines_text, parse_mode="HTML")
+                print(f"SCHEDULER: Отправлено ЧАСТОЕ уведомление пользователю {user.telegram_id}.")
+            except Exception as e:
+                print(f"SCHEDULER: Не удалось отправить уведомление {user.telegram_id}. Ошибка: {e}")
+        
+        await asyncio.sleep(1)
     print("SCHEDULER: Задача отправки уведомлений завершена.")

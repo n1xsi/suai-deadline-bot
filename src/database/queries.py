@@ -75,10 +75,10 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
 
         # Поиск всех существующих "парсерных" дедлайнов из БД
         existing_deadlines_query = await session.execute(
-            select(Deadline).where(Deadline.user_id == user.id, Deadline.is_custom == False)
+            select(Deadline).where(Deadline.user_id ==user.id, Deadline.is_custom == False)
         )
         existing_deadlines_list = existing_deadlines_query.scalars().all()
-        
+
         # Создание множества существующих дедлайнов для быстрой проверки (ключ - предмет+задание)
         existing_deadlines_set = {
             (d.course_name, d.task_name): d for d in existing_deadlines_list
@@ -257,3 +257,15 @@ async def update_notification_days(telegram_id: int, day: int) -> str:
         new_days_str = user.notification_days
         await session.commit()
         return new_days_str
+
+
+async def set_notification_interval(telegram_id: int, hours: int):
+    """Устанавливает интервал частых уведомлений для пользователя."""
+    async with async_session_factory() as session:
+        query = (
+            update(User)
+            .where(User.telegram_id == telegram_id)
+            .values(notification_interval_hours=hours)
+        )
+        await session.execute(query)
+        await session.commit()

@@ -68,6 +68,11 @@ def get_notification_settings_keyboard(user: User):
     # Кнопка включения/выключения
     status_text = "✅ Включены" if user.notifications_enabled else "❌ Выключены"
     builder.button(text=f"Напоминания: {status_text}", callback_data="toggle_notifications")
+    
+    # Кнопка для настройки частоты уведомлений по часам
+    interval = user.notification_interval_hours
+    interval_text = f"{interval} ч." if interval > 0 else "Выкл."
+    builder.button(text=f"Частые уведомления: {interval_text}", callback_data="set_interval")
 
     # Кнопки для дней уведомлений
     user_days = set(map(int, user.notification_days.split(','))) if user.notification_days else set()

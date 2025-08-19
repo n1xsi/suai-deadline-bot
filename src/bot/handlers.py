@@ -10,9 +10,10 @@ import asyncio
 from src.database.queries import (
     add_user, set_user_credentials, update_user_deadlines, add_custom_deadline,
     delete_deadline_by_id, toggle_notifications, update_notification_days,
-    get_user_by_telegram_id, get_user_deadlines_from_db, get_user_stats, delete_user_data
+    get_user_by_telegram_id, get_user_deadlines_from_db, get_user_stats, 
+    delete_user_data, set_notification_interval 
 )
-from src.bot.states import Registration, AddDeadline
+from src.bot.states import Registration, AddDeadline, SetNotificationInterval
 from src.parser.scraper import parse_deadlines_from_lk
 
 from src.bot.keyboards import (
@@ -309,6 +310,39 @@ async def toggle_day_callback(callback: CallbackQuery):
     await update_notification_days(callback.from_user.id, day)
     await update_notification_settings_menu(callback)
 
+### FSM для настройки интервала уведомлений
+
+@router.callback_query(F.data == "set_interval")
+async def set_interval_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "✍ Введите интервал в часах для частых уведомлений:\n"
+        "каждые <u>сколько часов</u> будет отправляться уведомление.\n\n"
+        "<i>Или введите <b>0</b>, чтобы отключить частые уведомления</i>.",
+        parse_mode="HTML"
+    )
+    await state.set_state(SetNotificationInterval.waiting_for_hours)
+    await callback.answer()
+
+@router.message(SetNotificationInterval.waiting_for_hours, F.text)
+async def set_interval_hours(message: types.Message, state: FSMContext):
+    try:
+        hours = int(message.text)
+        if not (0 <= hours <= 100):
+            raise ValueError
+    except ValueError:
+        await message.answer("⛔️ Неверный формат. Пожалуйста, введите целое число от 0 до 100.")
+        return
+
+    await set_notification_interval(message.from_user.id, hours)
+    await state.clear()
+    
+    # Обновляем меню, чтобы пользователь увидел изменения
+    user = await get_user_by_telegram_id(message.from_user.id)
+    if user:
+        await message.answer(
+            "✅ Настройки сохранены!",
+            reply_markup=get_notification_settings_keyboard(user)
+        )
 
 ### FSM для добавления нового дедлайна
 
