@@ -363,9 +363,11 @@ async def add_deadline_start(event: Union[types.Message, CallbackQuery], state: 
         # Если через команду /add, то отправляем новое сообщение
         await event.answer(text, reply_markup=get_cancel_keyboard())
     elif isinstance(event, CallbackQuery):
-        # Если через кнопку, то редактируем существующее сообщение
-        await event.message.edit_text(text)
-        # И обязательно отвечаем на callback, чтобы убрать "часики"
+        # Удаляем старое сообщение с кнопками настроек
+        await event.message.delete()
+        # Отправляем новое сообщение с кнопкой отмены
+        await event.message.answer(text, reply_markup=get_cancel_keyboard())
+        # Отвечаем на callback, чтобы убрать "часики"
         await event.answer()
         
     # Устанавливаем состояние в любом случае
