@@ -442,6 +442,11 @@ async def add_deadline_task(message: types.Message, state: FSMContext):
 async def add_deadline_date(message: types.Message, state: FSMContext):
     try:
         due_date = datetime.strptime(message.text, "%d.%m.%Y")
+        
+        if due_date.date() <= datetime.now().date():
+            await message.answer("⛔️ Нельзя добавить дедлайн на уже <u>прошедшую</u> или <u>сегодняшнюю</u> дату.\n"
+                                 "Введите дату, начиная с завтрашнего дня:", parse_mode="HTML")
+            return # Остаемся в том же состоянии, ждём нового ввода
     except ValueError:
         await message.answer("⛔️ Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:")
         return
