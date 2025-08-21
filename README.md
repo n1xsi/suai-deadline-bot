@@ -1,4 +1,4 @@
-# suai-deadline-bot
+# SUAI Deadline bot
 Telegram-бот на Python, который автоматически отслеживает личный кабинет студента ГУАП и напоминает о предстоящих дедлайнах сдачи работ.
 
 <p align="center">
@@ -18,7 +18,7 @@ suai-deadline-bot/
     │
     ├── bot/               # Компонент 1: всё, что связано с Telegram
     │   ├── __init__.py
-    │   ├── handlers.py    # Обработчики команд (/start, /help)
+    │   ├── handlers.py    # Обработчики команд, FSM
     │   ├── keyboards.py   # Код для создания кнопок
     │   ├── states.py      # Класс состояний для FSM
     │   └── main_bot.py    # Точка запуска бота
