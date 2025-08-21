@@ -141,21 +141,30 @@ async def get_users_with_upcoming_deadlines(days: int):
 
 
 async def get_user_stats(telegram_id: int) -> dict:
-    """Возвращает статистику по пользователю."""
+    """Возвращает статистику пользователя по telegram_id"""
     async with async_session_factory() as session:
         user = await get_user_by_telegram_id(telegram_id)
         if not user:
             return {}
 
-        # Подсчёт активных дедлайнов
-        query = select(func.count(Deadline.id)).where(
+        # Подсчёт всех дедлайнов
+        all_active_query = select(func.count(Deadline.id)).where(
             Deadline.user_id == user.id,
             Deadline.due_date >= datetime.now().date()
         )
-        active_deadlines_count = await session.execute(query)
+        all_active_count = await session.execute(all_active_query)
 
+        # Подсчёт личных дедлайнов ---
+        custom_active_query = select(func.count(Deadline.id)).where(
+            Deadline.user_id == user.id,
+            Deadline.due_date >= datetime.now().date(),
+            Deadline.is_custom == True
+        )
+        custom_active_count = await session.execute(custom_active_query)
+        
         return {
-            "active_deadlines": active_deadlines_count.scalar_one_or_none() or 0,
+            "active_deadlines": all_active_count.scalar_one_or_none() or 0,
+            "custom_deadlines": custom_active_count.scalar_one_or_none() or 0
         }
 
 

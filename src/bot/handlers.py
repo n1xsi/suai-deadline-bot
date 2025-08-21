@@ -182,10 +182,14 @@ async def show_profile(message: types.Message):
     if not stats:
         await message.answer("⛔ Не удалось найти ваш профиль. Попробуйте /start.")
         return
+    
+    active_count = stats.get('active_deadlines', 0)
+    custom_count = stats.get('custom_deadlines', 0)
 
     profile_text = (
         f"👤 <b>Ваш профиль</b>\n\n"
-        f"Активных дедлайнов: {stats.get('active_deadlines', 0)}\n"
+        f"Активных дедлайнов: <b>{active_count}</b>\n"
+        f"📌 из них личных: {custom_count}"
     )
     await message.answer(profile_text, reply_markup=get_profile_keyboard(), parse_mode="HTML")
 
