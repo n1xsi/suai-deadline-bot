@@ -109,11 +109,11 @@ async def process_password(message: types.Message, state: FSMContext):
     # Парсер - синхронный (использует requests), а бот - асинхронный.
     # Поэтому запуск парсера происходит в отдельном потоке, чтобы не блокировать бота.
     loop = asyncio.get_event_loop()
-    new_parsed_deadlines = await loop.run_in_executor(None, parse_deadlines_from_lk, login, password)
+    parsed_data = await loop.run_in_executor(None, parse_deadlines_from_lk, login, password)
 
     await msg_to_delete.delete()  # Удаление сообщения "Пытаюсь войти..."
 
-    if new_parsed_deadlines is None:
+    if parsed_data is None:
         await message.answer(
             "⛔ Не удалось войти. Скорее всего, логин и/или пароль неверны.\n"
             "🥴 Пожалуйста, попробуй еще раз. Введи логин.",
@@ -121,14 +121,16 @@ async def process_password(message: types.Message, state: FSMContext):
         )
         await state.set_state(Registration.waiting_for_login)
         return
-
-    # Если мы здесь, значит авторизация прошла успешно
+    
+    # Распаковка результата
+    new_parsed_deadlines, profile_id = parsed_data
     
     # Сохранение учётных данных в БД
     await set_user_credentials(
         telegram_id=message.from_user.id,
         login=login,
-        password=password
+        password=password,
+        profile_id=profile_id
     )
     
     # Завершение регистрации
@@ -179,7 +181,8 @@ async def show_deadlines(message: types.Message):
 @router.message(F.text == "👤 Мой профиль")
 async def show_profile(message: types.Message):
     stats = await get_user_stats(message.from_user.id)
-    if not stats:
+    user = await get_user_by_telegram_id(message.from_user.id)
+    if not stats or not user:
         await message.answer("⛔ Не удалось найти ваш профиль. Попробуйте /start.")
         return
     
@@ -191,6 +194,11 @@ async def show_profile(message: types.Message):
         f"Активных дедлайнов: <b>{active_count}</b>\n"
         f"📌 из них личных: {custom_count}"
     )
+    
+    if user.profile_id:
+        profile_link = f"https://pro.guap.ru/inside/profile/{user.profile_id}"
+        profile_text += f"\n\n🔗 ID профиля: <a href='{profile_link}'>{user.profile_id}</a>"
+        
     await message.answer(profile_text, reply_markup=get_profile_keyboard(), parse_mode="HTML")
 
 # Команда "/stop" для удаления данных

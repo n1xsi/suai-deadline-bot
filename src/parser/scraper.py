@@ -52,21 +52,24 @@ def _perform_login(session: requests.Session, username: str, password: str) -> b
 
 
 def _extract_profile_id(session: requests.Session) -> Optional[str]:
-    """Извлекает ID профиля со страницы."""
+    """Извлекает ID профиля со страницы, анализируя ссылку на аватар."""
     try:
         response = session.get(f"{BASE_URL}/inside/profile")
         response.raise_for_status()
-
+        
         soup = BeautifulSoup(response.text, 'html.parser')
-        user_id = None
-
-        profile_link = soup.select_one('ul.breadcrumb li.active a')
-        if profile_link and 'href' in profile_link.attrs:
-            match = re.search(r'/profile/(\d+)', profile_link['href'])
+        avatar_img = soup.find('img', class_='profile_image')
+        
+        if avatar_img and 'src' in avatar_img.attrs:
+            src_link = avatar_img['src']
+            # Регулярное выражение для извлечения ID из ссылки /avatars/xx/ID.jpg
+            match = re.search(r'/(\d+)\.jpg$', src_link)
             if match:
                 user_id = match.group(1)
-
-        return user_id
+                return user_id
+            
+        return None
+        
     except requests.RequestException as e:
         print(f"Сетевая ошибка при поиске ID профиля: {e}")
         return None
