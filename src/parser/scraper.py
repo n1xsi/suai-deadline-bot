@@ -51,44 +51,30 @@ def _perform_login(session: requests.Session, username: str, password: str) -> b
         return False
 
 
-def _extract_profile_id(session: requests.Session) -> Optional[str]:
-    """
-    Извлекает ID профиля со страницы группы.
-    """
+def _extract_full_name(profile_soup: BeautifulSoup) -> Optional[str]:
+    """Извлекает полное имя пользователя со страницы профиля."""
+    full_name_tag = profile_soup.find('h3', class_='text-center')
+    if full_name_tag:
+        return full_name_tag.get_text(strip=True)
+    return None
+
+
+def _extract_profile_id(session: requests.Session, full_name: str) -> Optional[str]:
+    """Извлекает ID профиля, используя ФИО и страницу группы."""
     try:
-        # Получение ФИО пользователя через страницу профиля
-        profile_response = session.get(f"{BASE_URL}/inside/profile")
-        profile_response.raise_for_status()
-        profile_soup = BeautifulSoup(profile_response.text, 'html.parser')
-
-        full_name_tag = profile_soup.find('h3', class_='text-center')
-        if not full_name_tag:
-            print("Парсер: ОШИБКА - не удалось найти ФИО на странице профиля.")
-            return None
-        full_name = full_name_tag.get_text(strip=True)
-        print(f"Парсер: Найдено ФИО '{full_name}'. Ищу ID на странице группы...")
-
-        # Поиск ID профиля пользователя через страницу группы по ФИО
         group_page_response = session.get(f"{BASE_URL}/inside/student/groups")
         group_page_response.raise_for_status()
         group_soup = BeautifulSoup(group_page_response.text, 'html.parser')
-
+        
         student_links = group_soup.select('table tbody tr td a')
         for link in student_links:
-            if full_name in link.get_text(strip=True):
-                if 'href' in link.attrs:
-                    match = re.search(r'/profile/(\d+)', link['href'])
-                    if match:
-                        user_id = match.group(1)
-                        print(f"Парсер: ID найден! ID = {user_id}")
-                        return user_id
-
-        # Если цикл завершился, а ID не найден
-        print("Парсер: ОШИБКА - не удалось найти ID на странице группы.")
+            if full_name in link.get_text(strip=True) and 'href' in link.attrs:
+                match = re.search(r'/profile/(\d+)', link['href'])
+                if match:
+                    return match.group(1)
         return None
-
     except requests.RequestException as e:
-        print(f"Сетевая ошибка при поиске ID профиля: {e}")
+        print(f"Сетевая ошибка при поиске ID на странице группы: {e}")
         return None
 
 
@@ -120,27 +106,33 @@ def _extract_deadlines(session: requests.Session) -> Optional[List[Dict[str, str
         return None
 
 
-def parse_deadlines_from_lk(username: str, password: str) -> Optional[Tuple[List[Dict[str, str]], Optional[str]]]:
+def parse_lk_data(username: str, password: str) -> Optional[Tuple[List[Dict], Optional[str], Optional[str]]]:
     """
     Основная "публичная" функция. Координирует процесс парсинга.
-    Возвращает кортеж (список дедлайнов, ID профиля) или None в случае ошибки.
+    Возвращает кортеж (дедлайны, ID профиля, ФИО) или None в случае ошибки.
     """
     session = _get_session()
 
-    # Попытка авторизации
+    # Авторизация
     if not _perform_login(session, username, password):
-        return None  # Если логин не удался, прекращаем работу
-
+        return None
     print("Парсер: Успешная авторизация.")
+    
+    # Получаем страницу профиля один раз
+    profile_response = session.get(f"{BASE_URL}/inside/profile")
+    if not profile_response.ok:
+        return [], None, None
+    profile_soup = BeautifulSoup(profile_response.text, 'html.parser')
 
-    # Если авторизация прошла, извлекаем данные
-    profile_id = _extract_profile_id(session)
+    # Извлечение данных
+    full_name = _extract_full_name(profile_soup)
+    profile_id = _extract_profile_id(session, full_name) if full_name else None
     deadlines = _extract_deadlines(session)
-
+    
     # Если парсинг дедлайнов не удался, то вернём пустой список
     if deadlines is None:
         deadlines = []
 
-    print(f"Парсер нашел ID={profile_id} и {len(deadlines)} дедлайнов.")
-
-    return deadlines, profile_id
+    print(f"Парсер нашел: ID={profile_id}, ФИО='{full_name}', Дедлайнов={len(deadlines)}")
+    
+    return deadlines, profile_id, full_name

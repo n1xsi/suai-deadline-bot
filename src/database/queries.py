@@ -26,8 +26,14 @@ async def add_user(telegram_id: int, username: str | None = None):
         return True
 
 
-async def set_user_credentials(telegram_id: int, login: str, password: str, profile_id: Optional[str] = None):
-    """Шифрует и сохраняет учетные данные и ID профиля пользователя в БД."""
+async def set_user_credentials(
+    telegram_id: int, 
+    login: str, 
+    password: str, 
+    profile_id: Optional[str] = None, 
+    full_name: Optional[str] = None
+):
+    """Шифрует и сохраняет учётные данные, ID профиля и ФИО пользователя в БД."""
     async with async_session_factory() as session:
         encrypted_login = encrypt_data(login)
         encrypted_password = encrypt_data(password)
@@ -38,7 +44,8 @@ async def set_user_credentials(telegram_id: int, login: str, password: str, prof
             .values(
                 encrypted_login_lk=encrypted_login,
                 encrypted_password_lk=encrypted_password,
-                profile_id=int(profile_id) if profile_id else None
+                profile_id=int(profile_id) if profile_id else None,
+                full_name=full_name
             )
         )
         await session.execute(query)

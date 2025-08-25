@@ -15,7 +15,7 @@ from src.database.queries import (
     delete_user_data, set_notification_interval, get_deadline_by_id
 )
 from src.bot.states import Registration, AddDeadline, SetNotificationInterval
-from src.parser.scraper import parse_deadlines_from_lk
+from src.parser.scraper import parse_lk_data
 
 from src.bot.keyboards import (
     get_main_menu_keyboard, get_cancel_keyboard, get_profile_keyboard,
@@ -109,7 +109,7 @@ async def process_password(message: types.Message, state: FSMContext):
     # Парсер - синхронный (использует requests), а бот - асинхронный.
     # Поэтому запуск парсера происходит в отдельном потоке, чтобы не блокировать бота.
     loop = asyncio.get_event_loop()
-    parsed_data = await loop.run_in_executor(None, parse_deadlines_from_lk, login, password)
+    parsed_data = await loop.run_in_executor(None, parse_lk_data, login, password)
 
     await msg_to_delete.delete()  # Удаление сообщения "Пытаюсь войти..."
 
@@ -123,14 +123,15 @@ async def process_password(message: types.Message, state: FSMContext):
         return
     
     # Распаковка результата
-    new_parsed_deadlines, profile_id = parsed_data
+    new_parsed_deadlines, profile_id, full_name = parsed_data
     
     # Сохранение учётных данных в БД
     await set_user_credentials(
         telegram_id=message.from_user.id,
         login=login,
         password=password,
-        profile_id=profile_id
+        profile_id=profile_id,
+        full_name=full_name
     )
     
     # Завершение регистрации
@@ -186,18 +187,19 @@ async def show_profile(message: types.Message):
         await message.answer("⛔ Не удалось найти ваш профиль. Попробуйте /start.")
         return
     
-    active_count = stats.get('active_deadlines', 0)
-    custom_count = stats.get('custom_deadlines', 0)
-
-    profile_text = (
-        f"👤 <b>Ваш профиль</b>\n\n"
-        f"Активных дедлайнов: <b>{active_count}</b>\n"
-        f"📌 из них личных: {custom_count}"
-    )
+    # Приветствуем пользователя по имени, если оно есть
+    greeting = f"👤 <b>{user.full_name}</b>" if user.full_name else "👤 <b>Ваш профиль</b>"
     
     if user.profile_id:
         profile_link = f"https://pro.guap.ru/inside/profile/{user.profile_id}"
-        profile_text += f"\n\n🔗 ID профиля: <a href='{profile_link}'>{user.profile_id}</a>"
+        greeting += f"\n\n🔗 ID профиля: <a href='{profile_link}'>{user.profile_id}</a>"
+    
+    active_count = stats.get('active_deadlines', 0)
+    custom_count = stats.get('custom_deadlines', 0)
+
+    profile_text = f"{greeting}\n\nАктивных дедлайнов: <b>{active_count}</b>"
+    if custom_count > 0:
+        profile_text += f"\n📌 из них <i>личных</i>: <b>{custom_count}</b>"
         
     await message.answer(profile_text, reply_markup=get_profile_keyboard(), parse_mode="HTML")
 

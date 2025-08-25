@@ -6,7 +6,7 @@ import asyncio
 from src.database.queries import (
     get_all_users, get_user_deadlines_from_db, update_user_deadlines
 )
-from src.parser.scraper import parse_deadlines_from_lk
+from src.parser.scraper import parse_lk_data
 from src.utils.crypto import decrypt_data
 
 
@@ -27,7 +27,7 @@ async def update_all_deadlines():
 
         # Запуск парсера
         loop = asyncio.get_event_loop()
-        deadlines = await loop.run_in_executor(None, parse_deadlines_from_lk, login, password)
+        deadlines = await loop.run_in_executor(None, parse_lk_data, login, password)
 
         if deadlines is not None:
             # Обновление дедлайнов в БД, если парсинг прошёл успешно

@@ -16,6 +16,7 @@ class User(Base):
     telegram_id = mapped_column(BigInteger, unique=True, nullable=False)
     username: Mapped[str] = mapped_column(String(32), nullable=True)
     profile_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=True)
 
     encrypted_login_lk: Mapped[str] = mapped_column(String(255), nullable=True)
     encrypted_password_lk: Mapped[str] = mapped_column(String(255), nullable=True)
