@@ -52,24 +52,41 @@ def _perform_login(session: requests.Session, username: str, password: str) -> b
 
 
 def _extract_profile_id(session: requests.Session) -> Optional[str]:
-    """Извлекает ID профиля со страницы, анализируя ссылку на аватар."""
+    """
+    Извлекает ID профиля со страницы группы.
+    """
     try:
-        response = session.get(f"{BASE_URL}/inside/profile")
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        avatar_img = soup.find('img', class_='profile_image')
-        
-        if avatar_img and 'src' in avatar_img.attrs:
-            src_link = avatar_img['src']
-            # Регулярное выражение для извлечения ID из ссылки /avatars/xx/ID.jpg
-            match = re.search(r'/(\d+)\.jpg$', src_link)
-            if match:
-                user_id = match.group(1)
-                return user_id
-            
+        # Получение ФИО пользователя через страницу профиля
+        profile_response = session.get(f"{BASE_URL}/inside/profile")
+        profile_response.raise_for_status()
+        profile_soup = BeautifulSoup(profile_response.text, 'html.parser')
+
+        full_name_tag = profile_soup.find('h3', class_='text-center')
+        if not full_name_tag:
+            print("Парсер: ОШИБКА - не удалось найти ФИО на странице профиля.")
+            return None
+        full_name = full_name_tag.get_text(strip=True)
+        print(f"Парсер: Найдено ФИО '{full_name}'. Ищу ID на странице группы...")
+
+        # Поиск ID профиля пользователя через страницу группы по ФИО
+        group_page_response = session.get(f"{BASE_URL}/inside/student/groups")
+        group_page_response.raise_for_status()
+        group_soup = BeautifulSoup(group_page_response.text, 'html.parser')
+
+        student_links = group_soup.select('table tbody tr td a')
+        for link in student_links:
+            if full_name in link.get_text(strip=True):
+                if 'href' in link.attrs:
+                    match = re.search(r'/profile/(\d+)', link['href'])
+                    if match:
+                        user_id = match.group(1)
+                        print(f"Парсер: ID найден! ID = {user_id}")
+                        return user_id
+
+        # Если цикл завершился, а ID не найден
+        print("Парсер: ОШИБКА - не удалось найти ID на странице группы.")
         return None
-        
+
     except requests.RequestException as e:
         print(f"Сетевая ошибка при поиске ID профиля: {e}")
         return None
