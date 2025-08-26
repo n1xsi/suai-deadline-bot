@@ -31,7 +31,7 @@ suai-deadline-bot/
     │   ├── __init__.py
     │   ├── engine.py      # Подключение к БД и создание сессий запросов
     │   ├── models.py      # Описание таблиц (User, Deadline)
-    │   └── queries.py     # Функции для работы с БД (create_user, get_deadlines)
+    │   └── queries.py     # Функции для работы с БД
     │
     ├── scheduler/         # Компонент 4: Планировщик
     │   ├── __init__.py
