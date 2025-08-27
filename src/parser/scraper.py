@@ -1,10 +1,41 @@
 from bs4 import BeautifulSoup
 from typing import List, Dict, Optional, Tuple
 
+from datetime import date
+
 import requests
 import re
 
 BASE_URL = "https://pro.guap.ru"
+
+
+def _get_current_semester_id() -> int:
+    """
+    Автоматически вычисляет ID текущего учебного семестра.
+    Точка отсчета: Осенний семестр 2025 года (учебный год 2025/2026) имеет ID=26.
+    """
+    
+    base_year_start = 2025
+    base_semester_id = 26
+    
+    today = date.today()
+    current_year = today.year
+    
+    # Осенний семестр начинается в сентябре, Весенний - в феврале
+    # Если месяц до сентября, значит, мы еще в учебном году, который начался в прошлом календарном году
+    current_study_year_start = current_year if today.month >= 9 else current_year - 1
+    
+    # Сколько полных учебных лет прошло с базовой точки отсчёта
+    year_diff = current_study_year_start - base_year_start
+    
+    # Каждый учебный год - это два семестра (осень + весна)
+    semester_id = base_semester_id + (year_diff * 2)
+    
+    # Если сейчас весенний семестр (до сентября), то к ID осеннего семестра + 1
+    if today.month < 9:
+        semester_id += 1
+        
+    return semester_id
 
 
 def _get_session() -> requests.Session:
@@ -81,7 +112,10 @@ def _extract_profile_id(session: requests.Session, full_name: str) -> Optional[s
 def _extract_deadlines(session: requests.Session) -> Optional[List[Dict[str, str]]]:
     """Парсит страницу с заданиями и возвращает список дедлайнов."""
     try:
-        tasks_url = f"{BASE_URL}/inside/student/tasks/?semester=25&subject=0&type=0&showStatus=1&perPage=200"
+        current_semester_id = _get_current_semester_id()
+        print(f"Текущий семестр ID: {current_semester_id}")
+        
+        tasks_url = f"{BASE_URL}/inside/student/tasks/?semester={current_semester_id}&subject=0&type=0&showStatus=1&perPage=200"
         response = session.get(tasks_url)
         response.raise_for_status()
 
