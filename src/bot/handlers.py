@@ -15,7 +15,7 @@ from src.database.queries import (
     delete_user_data, set_notification_interval, get_deadline_by_id
 )
 from src.bot.states import Registration, AddDeadline, SetNotificationInterval
-from src.parser.scraper import parse_lk_data
+from src.parser.scraper import parse_lk_data, _get_current_semester_id
 
 from src.bot.keyboards import (
     get_main_menu_keyboard, get_cancel_keyboard, get_profile_keyboard,
@@ -183,6 +183,8 @@ async def show_deadlines(message: types.Message):
 async def show_profile(message: types.Message):
     stats = await get_user_stats(message.from_user.id)
     user = await get_user_by_telegram_id(message.from_user.id)
+    _, semester_name = _get_current_semester_id()
+    
     if not stats or not user:
         await message.answer("⛔ Не удалось найти ваш профиль. Попробуйте /start.")
         return
@@ -192,12 +194,16 @@ async def show_profile(message: types.Message):
     
     if user.profile_id:
         profile_link = f"https://pro.guap.ru/inside/profile/{user.profile_id}"
-        greeting += f"\n\n🔗 ID профиля: <a href='{profile_link}'>{user.profile_id}</a>"
+        greeting += f"\n🔗 ID профиля ГУАП: <a href='{profile_link}'>{user.profile_id}</a>"
     
     active_count = stats.get('active_deadlines', 0)
     custom_count = stats.get('custom_deadlines', 0)
 
-    profile_text = f"{greeting}\n\nАктивных дедлайнов: <b>{active_count}</b>"
+    profile_text = (
+        f"{greeting}\n\n"
+        f"🎓 Текущий семестр: <b>{semester_name}</b>\n\n"
+        f"Активных дедлайнов: <b>{active_count}</b>"
+    )
     if custom_count > 0:
         profile_text += f"\n📌 из них <i>личных</i>: <b>{custom_count}</b>"
         
