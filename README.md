@@ -1,5 +1,14 @@
-# SUAI Deadline bot
-Telegram-бот на Python, который автоматически отслеживает личный кабинет студента ГУАП и напоминает о предстоящих дедлайнах сдачи работ.
+<h1 align="center">
+
+SUAI Deadline bot 🤖🔥
+
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)
+![aiogram](https://img.shields.io/badge/aiogram-3.x-blueviolet?style=for-the-badge&logo=telegram)
+![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-red?style=for-the-badge)
+
+</h1>
+
+Телеграм-бот для студентов ГУАП, который автоматически отслеживает дедлайны в личном кабинете и присылает уведомления. Проект выполнен в рамках учебной практики.
 
 <p align="center">
     <img src="resources/images/logo.png">
