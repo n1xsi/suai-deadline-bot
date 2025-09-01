@@ -27,7 +27,11 @@ async def update_all_deadlines():
 
         # Запуск парсера
         loop = asyncio.get_event_loop()
-        deadlines = await loop.run_in_executor(None, parse_lk_data, login, password)
+        parsed_data = await loop.run_in_executor(None, parse_lk_data, login, password)
+        if parsed_data:
+            deadlines, _, _ = parsed_data
+        else:
+            deadlines = None
 
         if deadlines is not None:
             # Обновление дедлайнов в БД, если парсинг прошёл успешно
