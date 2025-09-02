@@ -20,7 +20,8 @@ from src.parser.scraper import parse_lk_data, _get_current_semester_id
 from src.bot.keyboards import (
     get_main_menu_keyboard, get_cancel_keyboard, get_profile_keyboard,
     get_confirm_delete_keyboard, get_deadlines_settings_keyboard,
-    get_notification_settings_keyboard, get_confirm_delete_deadline_keyboard
+    get_notification_settings_keyboard, get_confirm_delete_deadline_keyboard,
+    get_pagination_keyboard
 )
 
 import asyncio
@@ -28,6 +29,9 @@ import asyncio
 # Создание роутера (нужен для организации хэндлеров)
 # Хендлер - это функция, которая обрабатывает входящие сообщения и команды.
 router = Router()
+
+# Количество дедлайнов на одной странице
+PAGE_SIZE = 5
 
 
 async def show_main_menu(message: types.Message):
@@ -157,26 +161,50 @@ async def process_password(message: types.Message, state: FSMContext):
 
 ### Основные команды меню
 
+def format_deadlines_page(deadlines: list, page: int, page_size: int = 5) -> str:
+    """Формирует текст одной страницы со списком дедлайнов."""
+    if not deadlines:
+        return "🕳 У вас пока нет предстоящих дедлайнов в базе."
+
+    start_index = page * page_size
+    end_index = start_index + page_size
+    
+    page_deadlines = deadlines[start_index:end_index]
+    
+    deadlines_text = "⏳ <b>Ваши актуальные дедлайны:</b>\n\n"
+    for i, d in enumerate(page_deadlines, start=start_index + 1):
+        deadlines_text += (
+            f"{i}.📚 <b>{d.course_name}</b>\n"
+            f"   📝 <b>Задание:</b> {d.task_name}\n"
+            f"   🗓️ <b>Срок сдачи:</b> {d.due_date.strftime('%d.%m.%Y')}\n\n"
+        )
+    return deadlines_text
+
+
 # Команда "/status" и кнопка "Посмотреть дедлайны"
 @router.message(Command("status"))
 @router.message(F.text == "🚨 Посмотреть дедлайны")
 async def show_deadlines(message: types.Message):
+    """
+    Показывает ПЕРВУЮ страницу со списком дедлайнов.
+    """
     deadlines = await get_user_deadlines_from_db(message.from_user.id)
     if not deadlines:
         await message.answer(
-            "🕳 У вас пока нет предстоящих дедлайнов в базе. \n"
+            "🕳 У вас пока нет предстоящих дедлайнов в базе.\n"
             "⏰ Обновление происходит автоматически <u>раз в час</u>.",
             parse_mode="HTML")
         return
+    
+    total_pages = (len(deadlines) + PAGE_SIZE - 1) // PAGE_SIZE
+    page_text = format_deadlines_page(deadlines, page=0, page_size=PAGE_SIZE)
+    
+    await message.answer(
+        page_text,
+        reply_markup=get_pagination_keyboard(current_page=0, total_pages=total_pages),
+        parse_mode="HTML"
+    )
 
-    deadlines_text = "⏳ <b>Ваши актуальные дедлайны:</b>\n\n"
-    for d in deadlines:
-        deadlines_text += (
-            f"📚 <b>{d.course_name}</b>\n"
-            f"📝 <b>Задание:</b> {d.task_name}\n"
-            f"🗓️ <b>Срок сдачи:</b> {d.due_date.strftime('%d.%m.%Y')}\n\n"
-        )
-    await message.answer(deadlines_text, parse_mode="HTML")
 
 # Кнопка "Мой профиль"
 @router.message(F.text == "👤 Мой профиль")
@@ -209,6 +237,7 @@ async def show_profile(message: types.Message):
         
     await message.answer(profile_text, reply_markup=get_profile_keyboard(), parse_mode="HTML")
 
+
 # Команда "/stop" для удаления данных
 @router.message(Command("stop"))
 async def cmd_stop(message: types.Message):
@@ -218,6 +247,7 @@ async def cmd_stop(message: types.Message):
         reply_markup=get_confirm_delete_keyboard(),
         parse_mode="HTML"
     )
+
 
 # Кнопка "Настройка напоминаний"
 @router.message(F.text == "🔔 Настройка напоминаний")
@@ -251,6 +281,7 @@ async def update_notification_settings_menu(callback: CallbackQuery):
             await callback.answer("⛔ Произошла ошибка при обновлении.")
             print(f"Непредвиденная ошибка: {e}")
 
+
 # Кнопка "Настройка дедлайнов"
 @router.message(F.text == "🛠️ Настройка дедлайнов")
 async def settings_deadlines_menu(message: types.Message):
@@ -262,6 +293,35 @@ async def settings_deadlines_menu(message: types.Message):
 
 
 ### Обработчики Callback'ов (нажатий на inline-кнопки)
+
+@router.callback_query(F.data.startswith("page_"))
+async def deadlines_page_callback(callback: CallbackQuery):
+    """
+    Обрабатывает переключение страниц в списке дедлайнов.
+    """
+    page = int(callback.data.split("_")[1])
+    
+    deadlines = await get_user_deadlines_from_db(callback.from_user.id)
+    if not deadlines:
+        await callback.answer("Дедлайны не найдены.", show_alert=True)
+        return
+        
+    total_pages = (len(deadlines) + PAGE_SIZE - 1) // PAGE_SIZE
+    page_text = format_deadlines_page(deadlines, page=page, page_size=PAGE_SIZE)
+    
+    await callback.message.edit_text(
+        page_text,
+        reply_markup=get_pagination_keyboard(current_page=page, total_pages=total_pages),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "ignore")
+async def ignore_callback(callback: CallbackQuery):
+    """Пустой хэндлер, чтобы кнопка с номером страницы ничего не делала."""
+    await callback.answer()
+
 
 @router.callback_query(F.data == "delete_my_data")
 async def on_delete_data(callback: CallbackQuery):
@@ -395,6 +455,7 @@ async def set_interval_start(callback: CallbackQuery, state: FSMContext):
     )
     await state.set_state(SetNotificationInterval.waiting_for_hours)
     await callback.answer()
+
 
 @router.message(SetNotificationInterval.waiting_for_hours, F.text)
 async def set_interval_hours(message: types.Message, state: FSMContext):

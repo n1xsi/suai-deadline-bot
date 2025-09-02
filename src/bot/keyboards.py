@@ -98,3 +98,24 @@ def get_confirm_delete_deadline_keyboard(deadline_id: int):
     builder.button(text="❌ Нет, оставить", callback_data="cancel_del_deadline")
     builder.adjust(2)
     return builder.as_markup()
+
+def get_pagination_keyboard(current_page: int, total_pages: int):
+    """
+    Создает клавиатуру для пагинации (Вперёд/Назад).
+    """
+    builder = InlineKeyboardBuilder()
+    
+    # Показ кнопки "Назад", если это не первая страница
+    if current_page > 0:
+        builder.button(text="⬅️ Назад", callback_data=f"page_{current_page - 1}")
+        
+    # Индикатор страницы ('ignore' - чтобы кнопка ничего не делала)
+    builder.button(text=f"📄 {current_page + 1} / {total_pages}", callback_data="ignore")
+    
+    # Кнопка "Вперёд" (показываем, если это не последняя страница)
+    if current_page < total_pages - 1:
+        builder.button(text="Вперёд ➡️", callback_data=f"page_{current_page + 1}")
+        
+    # Располагаем кнопки в один ряд
+    builder.adjust(3)
+    return builder.as_markup()
