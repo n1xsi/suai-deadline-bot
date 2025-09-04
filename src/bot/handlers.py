@@ -3,7 +3,7 @@ from datetime import datetime
 from aiogram import Router, F, types
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 from aiogram.exceptions import TelegramBadRequest
 
 from typing import Union
@@ -11,7 +11,7 @@ from typing import Union
 from src.database.queries import (
     add_user, set_user_credentials, update_user_deadlines, add_custom_deadline,
     delete_deadline_by_id, toggle_notifications, update_notification_days,
-    get_user_by_telegram_id, get_user_deadlines_from_db, get_user_stats, 
+    get_user_by_telegram_id, get_user_deadlines_from_db, get_user_stats,
     delete_user_data, set_notification_interval, get_deadline_by_id
 )
 from src.bot.states import Registration, AddDeadline, SetNotificationInterval
@@ -125,10 +125,10 @@ async def process_password(message: types.Message, state: FSMContext):
         )
         await state.set_state(Registration.waiting_for_login)
         return
-    
+
     # Распаковка результата
     new_parsed_deadlines, profile_id, full_name = parsed_data
-    
+
     # Сохранение учётных данных в БД
     await set_user_credentials(
         telegram_id=message.from_user.id,
@@ -137,9 +137,9 @@ async def process_password(message: types.Message, state: FSMContext):
         profile_id=profile_id,
         full_name=full_name
     )
-    
+
     # Завершение регистрации
-    await state.clear()  
+    await state.clear()
     await message.answer(
         "✅️ Отлично!\n"
         "💾 Я успешно вошёл в твой личный кабинет и сохранил твои данные.\n"
@@ -158,8 +158,8 @@ async def process_password(message: types.Message, state: FSMContext):
     else:
         await message.answer("Пока что я не нашел активных дедлайнов.")
 
-
-### Основные команды меню
+# -------------------------------------------------------------------------------------------
+# Основные команды меню
 
 def format_deadlines_page(deadlines: list, page: int, page_size: int = 5) -> str:
     """Формирует текст одной страницы со списком дедлайнов."""
@@ -168,9 +168,9 @@ def format_deadlines_page(deadlines: list, page: int, page_size: int = 5) -> str
 
     start_index = page * page_size
     end_index = start_index + page_size
-    
+
     page_deadlines = deadlines[start_index:end_index]
-    
+
     deadlines_text = "⏳ <b>Ваши актуальные дедлайны:</b>\n\n"
     for i, d in enumerate(page_deadlines, start=start_index + 1):
         deadlines_text += (
@@ -195,13 +195,14 @@ async def show_deadlines(message: types.Message):
             "⏰ Обновление происходит автоматически <u>раз в час</u>.",
             parse_mode="HTML")
         return
-    
+
     total_pages = (len(deadlines) + PAGE_SIZE - 1) // PAGE_SIZE
     page_text = format_deadlines_page(deadlines, page=0, page_size=PAGE_SIZE)
-    
+
     await message.answer(
         page_text,
-        reply_markup=get_pagination_keyboard(current_page=0, total_pages=total_pages),
+        reply_markup=get_pagination_keyboard(
+            current_page=0, total_pages=total_pages),
         parse_mode="HTML"
     )
 
@@ -212,18 +213,17 @@ async def show_profile(message: types.Message):
     stats = await get_user_stats(message.from_user.id)
     user = await get_user_by_telegram_id(message.from_user.id)
     _, semester_name = _get_current_semester_id()
-    
+
     if not stats or not user:
         await message.answer("⛔ Не удалось найти ваш профиль. Попробуйте /start.")
         return
-    
-    # Приветствуем пользователя по имени, если оно есть
+
     greeting = f"👤 <b>{user.full_name}</b>" if user.full_name else "👤 <b>Ваш профиль</b>"
-    
+
     if user.profile_id:
         profile_link = f"https://pro.guap.ru/inside/profile/{user.profile_id}"
         greeting += f"\n🔗 ID профиля ГУАП: <a href='{profile_link}'>{user.profile_id}</a>"
-    
+
     active_count = stats.get('active_deadlines', 0)
     custom_count = stats.get('custom_deadlines', 0)
 
@@ -234,7 +234,7 @@ async def show_profile(message: types.Message):
     )
     if custom_count > 0:
         profile_text += f"\n📌 из них <i>личных</i>: <b>{custom_count}</b>"
-        
+
     await message.answer(profile_text, reply_markup=get_profile_keyboard(), parse_mode="HTML")
 
 
@@ -287,12 +287,14 @@ async def update_notification_settings_menu(callback: CallbackQuery):
 async def settings_deadlines_menu(message: types.Message):
     deadlines = await get_user_deadlines_from_db(message.from_user.id)
     await message.answer(
-        "🔧 Здесь вы можете управлять дедлайнами:\nдобавлять собственные или удалять уже имеющиеся.",
+        "🔧 Здесь вы можете управлять дедлайнами:\n"
+        "добавлять собственные или удалять уже имеющиеся.",
         reply_markup=get_deadlines_settings_keyboard(deadlines)
     )
 
 
-### Обработчики Callback'ов (нажатий на inline-кнопки)
+# -------------------------------------------------------------------------------------------
+# Обработчики Callback'ов (нажатий на inline-кнопки)
 
 @router.callback_query(F.data.startswith("page_"))
 async def deadlines_page_callback(callback: CallbackQuery):
@@ -300,15 +302,15 @@ async def deadlines_page_callback(callback: CallbackQuery):
     Обрабатывает переключение страниц в списке дедлайнов.
     """
     page = int(callback.data.split("_")[1])
-    
+
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
     if not deadlines:
         await callback.answer("Дедлайны не найдены.", show_alert=True)
         return
-        
+
     total_pages = (len(deadlines) + PAGE_SIZE - 1) // PAGE_SIZE
     page_text = format_deadlines_page(deadlines, page=page, page_size=PAGE_SIZE)
-    
+
     await callback.message.edit_text(
         page_text,
         reply_markup=get_pagination_keyboard(current_page=page, total_pages=total_pages),
@@ -338,13 +340,12 @@ async def on_delete_data(callback: CallbackQuery):
 async def on_confirm_delete(callback: CallbackQuery):
     deleted = await delete_user_data(callback.from_user.id)
     if deleted:
-        # Убираем клавиатуру главного меню
-        from aiogram.types import ReplyKeyboardRemove
+        # Удаление клавиатуры главного меню
         await callback.message.edit_text(
             "🚮 Все ваши данные были удалены! Чтобы снова начать, отправьте /start.",
             reply_markup=None
         )
-        # Отправляем новое сообщение, чтобы убрать reply_markup
+        # Отправка нового сообщения, чтобы убрать reply_markup
         await callback.bot.send_message(
             callback.from_user.id,
             "👋 Вы были отписаны.",
@@ -366,25 +367,20 @@ async def delete_deadline_confirm_callback(callback: CallbackQuery):
     """
     Этот хэндлер запрашивает подтверждение на удаление дедлайна.
     """
-    # Извлекаем ID дедлайна из callback_data
     deadline_id = int(callback.data.split("_")[2])
-    
-    # Получаем информацию о дедлайне из БД
     deadline = await get_deadline_by_id(deadline_id)
-    
+
     if not deadline:
         await callback.answer("Этот дедлайн уже удален.", show_alert=True)
         return
-    
-    # Формируем информативное сообщение
+
     text = (
         f"Вы уверены, что хотите удалить дедлайн?\n\n"
         f"📚 <b>{deadline.course_name}</b>\n"
         f"📝 {deadline.task_name}\n"
         f"🗓️ {deadline.due_date.strftime('%d.%m.%Y')}"
     )
-    
-    # Редактируем сообщение, добавляя клавиатуру подтверждения
+
     await callback.message.edit_text(
         text,
         reply_markup=get_confirm_delete_deadline_keyboard(deadline_id),
@@ -400,8 +396,8 @@ async def confirm_delete_deadline_callback(callback: CallbackQuery):
     """
     deadline_id = int(callback.data.split("_")[3])
     await delete_deadline_by_id(deadline_id)
-    
-    # Обновляем исходное меню настроек, чтобы показать, что дедлайн исчез
+
+    # Обновление исходного меню настроек, чтобы показать, что дедлайн исчез
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
     await callback.message.edit_text(
         "🚮 Дедлайн удален. Вот обновленный список:",
@@ -443,7 +439,9 @@ async def toggle_day_callback(callback: CallbackQuery):
     await update_notification_days(callback.from_user.id, day)
     await update_notification_settings_menu(callback)
 
-### FSM для настройки интервала уведомлений
+# -------------------------------------------------------------------------------------------
+# FSM для настройки интервала уведомлений
+
 
 @router.callback_query(F.data == "set_interval")
 async def set_interval_start(callback: CallbackQuery, state: FSMContext):
@@ -469,8 +467,8 @@ async def set_interval_hours(message: types.Message, state: FSMContext):
 
     await set_notification_interval(message.from_user.id, hours)
     await state.clear()
-    
-    # Обновляем меню, чтобы пользователь увидел изменения
+
+    # Обновление меню, чтобы пользователь увидел изменения
     user = await get_user_by_telegram_id(message.from_user.id)
     if user:
         await message.answer(
@@ -478,7 +476,9 @@ async def set_interval_hours(message: types.Message, state: FSMContext):
             reply_markup=get_notification_settings_keyboard(user)
         )
 
-### FSM для добавления нового дедлайна
+# -------------------------------------------------------------------------------------------
+# FSM для добавления нового дедлайна
+
 
 @router.message(Command("add"))
 @router.callback_query(F.data == "add_deadline")
@@ -488,20 +488,19 @@ async def add_deadline_start(event: Union[types.Message, CallbackQuery], state: 
     Срабатывает как на команду /add, так и на нажатие inline-кнопки.
     """
     text = "[1️⃣/3️⃣] Введите название предмета:"
-    
-    # Проверяем, как была вызвана функция
-    if isinstance(event, types.Message):
-        # Если через команду /add, то отправляем новое сообщение
+
+    # Проверка, как была вызвана функция
+    if isinstance(event, types.Message):  # Если через команду /add
         await event.answer(text, reply_markup=get_cancel_keyboard())
-    elif isinstance(event, CallbackQuery):
-        # Удаляем старое сообщение с кнопками настроек
+    elif isinstance(event, CallbackQuery):  # Если через кнопку
+        # Удаляение старого сообщения с кнопками настроек
         await event.message.delete()
-        # Отправляем новое сообщение с кнопкой отмены
+        # Отправление нового сообщения с кнопкой отмены
         await event.message.answer(text, reply_markup=get_cancel_keyboard())
-        # Отвечаем на callback, чтобы убрать "часики"
+        # Ответ на callback, чтобы убрать "часики"
         await event.answer()
-        
-    # Устанавливаем состояние в любом случае
+
+    # Установка состояния в любом случае
     await state.set_state(AddDeadline.waiting_for_course_name)
 
 
@@ -523,11 +522,11 @@ async def add_deadline_task(message: types.Message, state: FSMContext):
 async def add_deadline_date(message: types.Message, state: FSMContext):
     try:
         due_date = datetime.strptime(message.text, "%d.%m.%Y")
-        
+
         if due_date.date() <= datetime.now().date():
             await message.answer("⛔️ Нельзя добавить дедлайн на уже <u>прошедшую</u> или <u>сегодняшнюю</u> дату.\n"
                                  "Введите дату, начиная с завтрашнего дня:", parse_mode="HTML")
-            return # Остаемся в том же состоянии, ждём нового ввода
+            return  # Остаёмся в том же состоянии, ожидая новый ввод
     except ValueError:
         await message.answer("⛔️ Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:")
         return
