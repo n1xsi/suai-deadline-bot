@@ -156,16 +156,16 @@ async def process_password(message: types.Message, state: FSMContext):
         )
         await message.answer(f"Вот, что я нашёл:\n\n{deadlines_text}", parse_mode="HTML")
     else:
-        await message.answer("Пока что я не нашел активных дедлайнов.")
+        await message.answer("На данный момент не найдено активных дедлайнов.")
 
 # -------------------------------------------------------------------------------------------
 # Основные команды меню
 
 def format_deadlines_page(deadlines: list, page: int, page_size: int = 5) -> str:
-    """Формирует текст одной страницы со списком дедлайнов."""
-    if not deadlines:
-        return "🕳 У вас пока нет предстоящих дедлайнов в базе."
-
+    """
+    Формирует текст одной страницы со списком дедлайнов.
+    Функция предполагает, что список `deadlines` не пустой.
+    """
     start_index = page * page_size
     end_index = start_index + page_size
 
@@ -185,9 +185,7 @@ def format_deadlines_page(deadlines: list, page: int, page_size: int = 5) -> str
 @router.message(Command("status"))
 @router.message(F.text == "🚨 Посмотреть дедлайны")
 async def show_deadlines(message: types.Message):
-    """
-    Показывает ПЕРВУЮ страницу со списком дедлайнов.
-    """
+    """Показывает ПЕРВУЮ страницу со списком дедлайнов."""
     deadlines = await get_user_deadlines_from_db(message.from_user.id)
     if not deadlines:
         await message.answer(
@@ -201,8 +199,7 @@ async def show_deadlines(message: types.Message):
 
     await message.answer(
         page_text,
-        reply_markup=get_pagination_keyboard(
-            current_page=0, total_pages=total_pages),
+        reply_markup=get_pagination_keyboard(current_page=0, total_pages=total_pages),
         parse_mode="HTML"
     )
 
@@ -305,7 +302,8 @@ async def deadlines_page_callback(callback: CallbackQuery):
 
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
     if not deadlines:
-        await callback.answer("Дедлайны не найдены.", show_alert=True)
+        await callback.message.edit_text("🕳 Дедлайнов больше нет.")
+        await callback.answer()
         return
 
     total_pages = (len(deadlines) + PAGE_SIZE - 1) // PAGE_SIZE
@@ -321,7 +319,7 @@ async def deadlines_page_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "ignore")
 async def ignore_callback(callback: CallbackQuery):
-    """Пустой хэндлер, чтобы кнопка с номером страницы ничего не делала."""
+    """Пустой хэндлер, чтобы нажатие на кнопку не делало ничего."""
     await callback.answer()
 
 
