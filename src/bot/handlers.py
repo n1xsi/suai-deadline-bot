@@ -1,12 +1,11 @@
 from datetime import datetime
+from typing import Union
 
 from aiogram import Router, F, types
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 from aiogram.exceptions import TelegramBadRequest
-
-from typing import Union
 
 from src.database.queries import (
     add_user, set_user_credentials, update_user_deadlines, add_custom_deadline,
@@ -15,6 +14,8 @@ from src.database.queries import (
     delete_user_data, set_notification_interval, get_deadline_by_id
 )
 from src.bot.states import Registration, AddDeadline, SetNotificationInterval
+from src.bot.filters import InStateFilter
+
 from src.parser.scraper import parse_lk_data, _get_current_semester_id
 
 from src.bot.keyboards import (
@@ -74,6 +75,8 @@ async def cmd_help(message: types.Message):
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
     """Обработчик команды /start."""
+    # /start всегда сбрасывает состояние и ведёт в главное меню
+    await state.clear() 
 
     is_new = await add_user(telegram_id=message.from_user.id, username=message.from_user.username)
 
@@ -157,6 +160,14 @@ async def process_password(message: types.Message, state: FSMContext):
         await message.answer(f"Вот, что я нашёл:\n\n{deadlines_text}", parse_mode="HTML")
     else:
         await message.answer("На данный момент не найдено активных дедлайнов.")
+
+
+@router.message(InStateFilter(), F.text.in_({"🚨 Посмотреть дедлайны", "🔔 Настройка напоминаний", "👤 Мой профиль", "🛠️ Настройка дедлайнов"}))
+async def block_menu_in_state(message: types.Message):
+    await message.answer(
+        "Пожалуйста, сначала завершите текущее действие (регистрацию/добавление дедлайна), "
+        "или отмените его кнопкой '❌ Отмена' (команда /cancel).",
+    )
 
 # -------------------------------------------------------------------------------------------
 # Основные команды меню
