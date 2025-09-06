@@ -118,8 +118,9 @@ async def process_password(message: types.Message, state: FSMContext):
     password = message.text
 
     await message.delete()  # Удаление сообщения с паролем (для безопасности)
-
+    
     msg_to_delete = await message.answer("Пытаюсь войти в личный кабинет, это может занять минуту...")
+    await message.bot.send_chat_action(chat_id=message.chat.id, action="typing") # Показ "печатает..."
 
     # Парсер - синхронный (использует requests), а бот - асинхронный.
     # Поэтому запуск парсера происходит в отдельном потоке, чтобы не блокировать бота.
@@ -511,6 +512,16 @@ async def add_deadline_start(event: Union[types.Message, CallbackQuery], state: 
 
     # Установка состояния в любом случае
     await state.set_state(AddDeadline.waiting_for_course_name)
+    
+
+@router.message(AddDeadline.waiting_for_due_date)
+@router.message(AddDeadline.waiting_for_task_name)
+@router.message(AddDeadline.waiting_for_course_name)
+@router.message(Registration.waiting_for_password)
+@router.message(Registration.waiting_for_login)
+async def incorrect_input_in_state(message: types.Message):
+    """Хэндлер для ловли некорректного ввода (не текста) в состояниях FSM."""
+    await message.reply("Пожалуйста, введите текстовое значение или нажмите '❌ Отмена' (команда /cancel).")
 
 
 @router.message(AddDeadline.waiting_for_course_name, F.text)
