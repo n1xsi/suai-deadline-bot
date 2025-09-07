@@ -18,10 +18,23 @@ def get_main_menu_keyboard():
     return keyboard
 
 
-def get_profile_keyboard():
-    """Создаёт inline-клавиатуру для меню 'Мой профиль'."""
+def get_profile_keyboard(custom_deadlines_count: int = 0):
+    """
+    Создаёт inline-клавиатуру для меню 'Мой профиль'.
+    Динамически добавляет кнопку удаления личных дедлайнов.
+    """
     builder = InlineKeyboardBuilder()
+    
+    if custom_deadlines_count > 0:
+        builder.button(
+            text=f"🚮 Удалить все личные дедлайны", 
+            callback_data="delete_all_custom"
+        )
+    
     builder.button(text="🗑️ Удалить все мои данные", callback_data="delete_my_data")
+    
+    # Расположение кнопок по одной в строке
+    builder.adjust(1)
     return builder.as_markup()
 
 
@@ -91,6 +104,7 @@ def get_notification_settings_keyboard(user: User):
     builder.button(text="⬅️ Назад", callback_data="back_to_main_from_settings")
     return builder.as_markup()
 
+
 def get_confirm_delete_deadline_keyboard(deadline_id: int):
     """Создаёт inline-клавиатуру для подтверждения удаления дедлайна."""
     builder = InlineKeyboardBuilder()
@@ -98,6 +112,16 @@ def get_confirm_delete_deadline_keyboard(deadline_id: int):
     builder.button(text="❌ Нет, оставить", callback_data="cancel_del_deadline")
     builder.adjust(2)
     return builder.as_markup()
+
+
+def get_confirm_delete_all_custom_keyboard():
+    """Создаёт inline-клавиатуру для подтверждения удаления ВСЕХ личных дедлайнов."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Да, удалить все", callback_data="confirm_delete_all_custom")
+    builder.button(text="❌ Нет, отмена", callback_data="cancel_delete_all_custom")
+    builder.adjust(2)
+    return builder.as_markup()
+
 
 def get_pagination_keyboard(current_page: int, total_pages: int):
     """

@@ -295,3 +295,19 @@ async def set_notification_interval(telegram_id: int, hours: int):
         )
         await session.execute(query)
         await session.commit()
+
+
+async def delete_all_custom_deadlines(telegram_id: int):
+    """Удаляет ВСЕ личные (is_custom=True) дедлайны пользователя."""
+    async with async_session_factory() as session:
+        user = await get_user_by_telegram_id(telegram_id)
+        if not user:
+            return False
+        
+        query = delete(Deadline).where(
+            Deadline.user_id == user.id,
+            Deadline.is_custom == True
+        )
+        await session.execute(query)
+        await session.commit()
+        return True

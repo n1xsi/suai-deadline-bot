@@ -11,7 +11,8 @@ from src.database.queries import (
     add_user, set_user_credentials, update_user_deadlines, add_custom_deadline,
     delete_deadline_by_id, toggle_notifications, update_notification_days,
     get_user_by_telegram_id, get_user_deadlines_from_db, get_user_stats,
-    delete_user_data, set_notification_interval, get_deadline_by_id
+    delete_user_data, set_notification_interval, get_deadline_by_id,
+    delete_all_custom_deadlines
 )
 from src.bot.states import Registration, AddDeadline, SetNotificationInterval
 from src.bot.filters import InStateFilter
@@ -22,7 +23,7 @@ from src.bot.keyboards import (
     get_main_menu_keyboard, get_cancel_keyboard, get_profile_keyboard,
     get_confirm_delete_keyboard, get_deadlines_settings_keyboard,
     get_notification_settings_keyboard, get_confirm_delete_deadline_keyboard,
-    get_pagination_keyboard
+    get_pagination_keyboard, get_confirm_delete_all_custom_keyboard
 )
 
 import asyncio
@@ -244,7 +245,11 @@ async def show_profile(message: types.Message):
     if custom_count > 0:
         profile_text += f"\n📌 из них <i>личных</i>: <b>{custom_count}</b>"
 
-    await message.answer(profile_text, reply_markup=get_profile_keyboard(), parse_mode="HTML")
+    await message.answer(
+        profile_text, 
+        reply_markup=get_profile_keyboard(custom_deadlines_count=custom_count),
+        parse_mode="HTML"
+    )
 
 
 # Команда "/stop" для удаления данных
@@ -448,6 +453,39 @@ async def toggle_day_callback(callback: CallbackQuery):
     day = int(callback.data.split("_")[2])
     await update_notification_days(callback.from_user.id, day)
     await update_notification_settings_menu(callback)
+    
+
+@router.callback_query(F.data == "delete_all_custom")
+async def on_delete_all_custom(callback: CallbackQuery):
+    """Запрашивает подтверждение на удаление всех личных дедлайнов."""
+    await callback.message.edit_text(
+        "Вы уверены, что хотите удалить <b><u>ВСЕ</u></b> ваши личные дедлайны?\n"
+        "Это действие необратимо!",
+        reply_markup=get_confirm_delete_all_custom_keyboard(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "confirm_delete_all_custom")
+async def on_confirm_delete_all_custom(callback: CallbackQuery):
+    """Удаляет все личные дедлайны."""
+    await delete_all_custom_deadlines(callback.from_user.id)
+    await callback.message.delete() # Удаление сообщения с кнопкой подтверждения
+    await callback.message.answer(
+        "✅ Все ваши <b>личные</b> дедлайны были удалены (вузовские не затронуты).",
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "cancel_delete_all_custom")
+async def on_cancel_delete_all_custom(callback: CallbackQuery):
+    """Отменяет удаление и возвращает в профиль."""
+    await callback.message.delete() # Удаление сообщения с кнопкой подтверждения
+    # Показ профиля заново, чтобы пользователь не потерялся
+    await show_profile(callback.message)
+    await callback.answer()
 
 # -------------------------------------------------------------------------------------------
 # FSM для настройки интервала уведомлений
@@ -512,16 +550,6 @@ async def add_deadline_start(event: Union[types.Message, CallbackQuery], state: 
 
     # Установка состояния в любом случае
     await state.set_state(AddDeadline.waiting_for_course_name)
-    
-
-@router.message(AddDeadline.waiting_for_due_date)
-@router.message(AddDeadline.waiting_for_task_name)
-@router.message(AddDeadline.waiting_for_course_name)
-@router.message(Registration.waiting_for_password)
-@router.message(Registration.waiting_for_login)
-async def incorrect_input_in_state(message: types.Message):
-    """Хэндлер для ловли некорректного ввода (не текста) в состояниях FSM."""
-    await message.reply("Пожалуйста, введите текстовое значение или нажмите '❌ Отмена' (команда /cancel).")
 
 
 @router.message(AddDeadline.waiting_for_course_name, F.text)
