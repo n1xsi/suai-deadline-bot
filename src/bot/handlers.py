@@ -479,13 +479,6 @@ async def cancel_delete_deadline_callback(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "back_to_main_from_settings")
-async def back_to_main_menu_callback(callback: CallbackQuery):
-    await callback.message.delete()
-    await show_main_menu(callback.message)
-    await callback.answer()
-
-
 @router.callback_query(F.data == "toggle_notifications")
 async def toggle_notifications_callback(callback: CallbackQuery):
     await toggle_notifications(callback.from_user.id)

@@ -99,14 +99,9 @@ def get_deadlines_settings_keyboard(deadlines: list, current_page: int, page_siz
     # Если кнопок пагинации больше нуля, добавляем их в ряд
     if pagination_buttons:
         builder.row(*pagination_buttons)
-
-    builder.row(
-        InlineKeyboardButton(text="➕ Добавить собственный дедлайн", callback_data="add_deadline"),
-        InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main_from_settings")
-    )
     
-    # Выстраивание кнопок: по одной на дедлайн, затем ряды пагинации и действий
-    builder.adjust(*([1] * len(page_deadlines)))
+    # Выстраивание кнопок: по одной на дедлайн, затем действия и ряд пагинации
+    builder.adjust(*([1] * len(page_deadlines)), 1, len(pagination_buttons))
     return builder.as_markup()
 
 
@@ -135,9 +130,6 @@ def get_notification_settings_keyboard(user: User):
 
     # Ряд с кнопками дней
     builder.row(*day_buttons)
-
-    # Кнопка для возврата в главное меню
-    builder.button(text="⬅️ Назад", callback_data="back_to_main_from_settings")
     return builder.as_markup()
 
 
