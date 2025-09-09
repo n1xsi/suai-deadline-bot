@@ -58,24 +58,55 @@ def get_cancel_keyboard():
     return keyboard
 
 
-def get_deadlines_settings_keyboard(deadlines: list):
+def get_deadlines_settings_keyboard(deadlines: list, current_page: int, page_size: int):
     """
-    Создаёт клавиатуру для управления дедлайнами.
+    Создаёт пагинированную клавиатуру для удаления дедлайнов.
     Каждый дедлайн - это кнопка для его удаления.
     """
     builder = InlineKeyboardBuilder()
-    if deadlines:
-        for deadline in deadlines:
-            builder.button(
-                text=f"❌ {deadline.course_name[:20]}... ({deadline.due_date.strftime('%d.%m')})",
-                callback_data=f"del_deadline_{deadline.id}"
-            )
+    
+    total_pages = (len(deadlines) + page_size - 1) // page_size
+    
+    # "Нарезка" списка дедлайнов для текущей страницы
+    start_index = current_page * page_size
+    end_index = start_index + page_size
+    page_deadlines = deadlines[start_index:end_index]
 
-    builder.button(text="➕ Добавить собственный дедлайн", callback_data="add_deadline")
-    builder.button(text="⬅️ Назад", callback_data="back_to_main_from_settings")
+    # Создание кнопок для удаления дедлайнов
+    for deadline in page_deadlines:
+        builder.button(
+            text=f"❌ {deadline.course_name[:20]}... ({deadline.due_date.strftime('%d.%m')})",
+            callback_data=f"del_deadline_{deadline.id}"
+        )
+    
+    # Кнопка для добавления нового дедлайна (в отдельном ряду)
+    builder.row(InlineKeyboardButton(text="➕ Добавить собственный дедлайн", callback_data="add_deadline"))
 
-    # Выстраиваем кнопки: по одной на дедлайн, и две последних в ряд
-    builder.adjust(*([1] * len(deadlines)), 1, 1)
+    pagination_buttons = []
+    if current_page > 0:
+        pagination_buttons.append(
+            InlineKeyboardButton(text="⬅️ Назад", callback_data=f"settings_page_{current_page - 1}")
+        )
+    if total_pages > 1:
+        pagination_buttons.append(
+            InlineKeyboardButton(text=f"📄 {current_page + 1}/{total_pages}", callback_data="ignore")
+        )
+    if current_page < total_pages - 1:
+        pagination_buttons.append(
+            InlineKeyboardButton(text="Вперед ➡️", callback_data=f"settings_page_{current_page + 1}")
+        )
+    
+    # Если кнопок пагинации больше нуля, добавляем их в ряд
+    if pagination_buttons:
+        builder.row(*pagination_buttons)
+
+    builder.row(
+        InlineKeyboardButton(text="➕ Добавить собственный дедлайн", callback_data="add_deadline"),
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main_from_settings")
+    )
+    
+    # Выстраивание кнопок: по одной на дедлайн, затем ряды пагинации и действий
+    builder.adjust(*([1] * len(page_deadlines)))
     return builder.as_markup()
 
 

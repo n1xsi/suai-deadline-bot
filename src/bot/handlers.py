@@ -31,8 +31,7 @@ import asyncio
 # Хендлер - это функция, которая обрабатывает входящие сообщения и команды.
 router = Router()
 
-# Количество дедлайнов на одной странице
-PAGE_SIZE = 5
+PAGE_SIZE = 5 # Количество дедлайнов на одной странице
 
 
 @router.message(InStateFilter(), F.text.in_({"🚨 Посмотреть дедлайны", "🔔 Настройка напоминаний", "👤 Мой профиль", "🛠️ Настройка дедлайнов"}))
@@ -304,10 +303,15 @@ async def update_notification_settings_menu(callback: CallbackQuery):
 @router.message(F.text == "🛠️ Настройка дедлайнов")
 async def settings_deadlines_menu(message: types.Message):
     deadlines = await get_user_deadlines_from_db(message.from_user.id)
+    
     await message.answer(
         "🔧 Здесь вы можете управлять дедлайнами:\n"
-        "добавлять собственные или удалять уже имеющиеся.",
-        reply_markup=get_deadlines_settings_keyboard(deadlines)
+        "добавлять собственные или удалять уже имеющиеся",
+        reply_markup=get_deadlines_settings_keyboard(
+            deadlines, 
+            current_page=0, 
+            page_size=PAGE_SIZE
+        )
     )
 
 
@@ -334,6 +338,24 @@ async def deadlines_page_callback(callback: CallbackQuery):
         page_text,
         reply_markup=get_pagination_keyboard(current_page=page, total_pages=total_pages),
         parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("settings_page_"))
+async def settings_page_callback(callback: CallbackQuery):
+    """
+    Обрабатывает переключение страниц в меню настройки дедлайнов.
+    """
+    page = int(callback.data.split("_")[2])
+    deadlines = await get_user_deadlines_from_db(callback.from_user.id)
+        
+    await callback.message.edit_reply_markup(
+        reply_markup=get_deadlines_settings_keyboard(
+            deadlines, 
+            current_page=page, 
+            page_size=PAGE_SIZE
+        )
     )
     await callback.answer()
 
@@ -421,7 +443,7 @@ async def delete_deadline_confirm_callback(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("confirm_del_deadline_"))
 async def confirm_delete_deadline_callback(callback: CallbackQuery):
     """
-    Этот хэндлер срабатывает при подтверждении и окончательно удаляет дедлайн.
+    Хэндлер, который срабатывает при подтверждении и окончательно удаляет дедлайн.
     """
     deadline_id = int(callback.data.split("_")[3])
     await delete_deadline_by_id(deadline_id)
@@ -430,7 +452,11 @@ async def confirm_delete_deadline_callback(callback: CallbackQuery):
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
     await callback.message.edit_text(
         "🚮 Дедлайн удален. Вот обновленный список:",
-        reply_markup=get_deadlines_settings_keyboard(deadlines)
+        reply_markup=get_deadlines_settings_keyboard(
+            deadlines, 
+            current_page=0, # Возврат на первую страницу
+            page_size=PAGE_SIZE
+        )
     )
     await callback.answer(text="Удалено!", show_alert=False)
 
@@ -438,13 +464,17 @@ async def confirm_delete_deadline_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "cancel_del_deadline")
 async def cancel_delete_deadline_callback(callback: CallbackQuery):
     """
-    Этот хэндлер срабатывает при отмене удаления, возвращая пользователя
+    Хэндлер, который срабатывает при отмене удаления, возвращая пользователя
     в меню настроек дедлайнов.
     """
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
     await callback.message.edit_text(
         "❕ Удаление отменено. Вы снова в меню управления дедлайнами.",
-        reply_markup=get_deadlines_settings_keyboard(deadlines)
+        reply_markup=get_deadlines_settings_keyboard(
+            deadlines, 
+            current_page=0, # Возврат на первую страницу
+            page_size=PAGE_SIZE
+        )
     )
     await callback.answer()
 
