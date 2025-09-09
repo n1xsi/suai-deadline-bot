@@ -21,9 +21,8 @@ from src.parser.scraper import parse_lk_data, _get_current_semester_id
 
 from src.bot.keyboards import (
     get_main_menu_keyboard, get_cancel_keyboard, get_profile_keyboard,
-    get_confirm_delete_keyboard, get_deadlines_settings_keyboard,
-    get_notification_settings_keyboard, get_confirm_delete_deadline_keyboard,
-    get_pagination_keyboard, get_confirm_delete_all_custom_keyboard
+    get_confirm_keyboard, get_deadlines_settings_keyboard,
+    get_notification_settings_keyboard, get_pagination_keyboard
 )
 
 import asyncio
@@ -258,7 +257,12 @@ async def cmd_stop(message: types.Message):
     await message.answer(
         "Вы уверены, что хотите отписаться и удалить все свои данные?\n"
         "Это действие <b><u>необратимо</u></b>.",
-        reply_markup=get_confirm_delete_keyboard(),
+        reply_markup=get_confirm_keyboard(
+        confirm_text="Да, удалить",
+        confirm_callback="confirm_delete",
+        cancel_text="Нет, оставить",
+        cancel_callback="cancel_delete"
+        ),
         parse_mode="HTML"
     )
 
@@ -345,7 +349,12 @@ async def on_delete_data(callback: CallbackQuery):
     await callback.message.edit_text(
         "🗑️ Вы уверены, что хотите отписаться и удалить все свои данные?\n"
         "❗️ Это действие <b><u>необратимо</u></b>.",
-        reply_markup=get_confirm_delete_keyboard(),
+        reply_markup=get_confirm_keyboard(
+        confirm_text="Да, удалить",
+        confirm_callback="confirm_delete",
+        cancel_text="Нет, оставить",
+        cancel_callback="cancel_delete"
+        ),
         parse_mode="HTML"
     )
     await callback.answer()
@@ -398,7 +407,12 @@ async def delete_deadline_confirm_callback(callback: CallbackQuery):
 
     await callback.message.edit_text(
         text,
-        reply_markup=get_confirm_delete_deadline_keyboard(deadline_id),
+        reply_markup=get_confirm_keyboard(
+        confirm_text="Да, удалить",
+        confirm_callback=f"confirm_del_deadline_{deadline_id}",
+        cancel_text="Нет, оставить",
+        cancel_callback="cancel_del_deadline"
+        ),
         parse_mode="HTML"
     )
     await callback.answer()
@@ -461,7 +475,12 @@ async def on_delete_all_custom(callback: CallbackQuery):
     await callback.message.edit_text(
         "Вы уверены, что хотите удалить <b><u>ВСЕ</u></b> ваши личные дедлайны?\n"
         "Это действие необратимо!",
-        reply_markup=get_confirm_delete_all_custom_keyboard(),
+        reply_markup=get_confirm_keyboard(
+        confirm_text="Да, удалить все",
+        confirm_callback="confirm_delete_all_custom",
+        cancel_text="Нет, отмена",
+        cancel_callback="cancel_delete_all_custom"
+        ),
         parse_mode="HTML"
     )
     await callback.answer()

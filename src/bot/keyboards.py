@@ -32,18 +32,23 @@ def get_profile_keyboard(custom_deadlines_count: int = 0):
         )
     
     builder.button(text="🗑️ Удалить все мои данные", callback_data="delete_my_data")
-    
-    # Расположение кнопок по одной в строке
-    builder.adjust(1)
+    builder.adjust(1) # Расположение кнопок по одной в строке
     return builder.as_markup()
 
 
-def get_confirm_delete_keyboard():
-    """Создаёт inline-клавиатуру для подтверждения удаления."""
+def get_confirm_keyboard(
+    confirm_text: str, 
+    confirm_callback: str, 
+    cancel_text: str, 
+    cancel_callback: str
+):
+    """
+    Создаёт универсальную клавиатуру для подтверждения действий.
+    """
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Да, удалить", callback_data="confirm_delete")
-    builder.button(text="❌ Нет, оставить", callback_data="cancel_delete")
-    builder.adjust(2)  # Расположение кнопок в один ряд по две
+    builder.button(text=f"✅ {confirm_text}", callback_data=confirm_callback)
+    builder.button(text=f"❌ {cancel_text}", callback_data=cancel_callback)
+    builder.adjust(2)
     return builder.as_markup()
 
 
@@ -102,24 +107,6 @@ def get_notification_settings_keyboard(user: User):
 
     # Кнопка для возврата в главное меню
     builder.button(text="⬅️ Назад", callback_data="back_to_main_from_settings")
-    return builder.as_markup()
-
-
-def get_confirm_delete_deadline_keyboard(deadline_id: int):
-    """Создаёт inline-клавиатуру для подтверждения удаления дедлайна."""
-    builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Да, удалить", callback_data=f"confirm_del_deadline_{deadline_id}")
-    builder.button(text="❌ Нет, оставить", callback_data="cancel_del_deadline")
-    builder.adjust(2)
-    return builder.as_markup()
-
-
-def get_confirm_delete_all_custom_keyboard():
-    """Создаёт inline-клавиатуру для подтверждения удаления ВСЕХ личных дедлайнов."""
-    builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Да, удалить все", callback_data="confirm_delete_all_custom")
-    builder.button(text="❌ Нет, отмена", callback_data="cancel_delete_all_custom")
-    builder.adjust(2)
     return builder.as_markup()
 
 
