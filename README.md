@@ -6,9 +6,10 @@
     
   SUAI Deadline Bot 🤖🔥
 
-  ![Python](https://custom-icon-badges.demolab.com/badge/3.10+-blue?logo=pythonn&label=Python)
-  ![aiogram](https://img.shields.io/badge/aiogram-3.x-blueviolet?style=flat&logo=telegram)
-  ![SQLAlchemy](https://custom-icon-badges.demolab.com/badge/2.0-red?logo=sqlalchemy&label=SQLAlchemy)
+  ![Python](https://custom-icon-badges.demolab.com/badge/3.10+-ff480d?logo=pythonn&label=Python)
+  ![aiogram](https://img.shields.io/badge/aiogram-3.x-ff480d?style=flat&logo=telegram)
+  ![SQLAlchemy](https://custom-icon-badges.demolab.com/badge/2.0-ff480d?logo=sqlalchemy&label=SQLAlchemy)
+  [![License](https://custom-icon-badges.demolab.com/badge/MIT-ff480d?logo=law&label=License)](LICENSE)
   
 </h1>
 
