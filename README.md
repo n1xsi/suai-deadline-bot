@@ -6,10 +6,10 @@
     
   SUAI Deadline Bot 🤖🔥
 
-  ![Python](https://custom-icon-badges.demolab.com/badge/3.10+-ff480d?logo=pythonn&label=Python)
-  ![aiogram](https://img.shields.io/badge/aiogram-3.x-ff480d?style=flat&logo=telegram)
-  ![SQLAlchemy](https://custom-icon-badges.demolab.com/badge/2.0-ff480d?logo=sqlalchemy&label=SQLAlchemy)
-  [![License](https://custom-icon-badges.demolab.com/badge/MIT-ff480d?logo=law&label=License)](LICENSE)
+  ![Python](https://custom-icon-badges.demolab.com/badge/3.10+-ff480d?logo=pythonn&label=Python&style=for-the-badge)
+  ![aiogram](https://img.shields.io/badge/aiogram-3.x-ff480d?style=for-the-badge&logo=telegram)
+  ![SQLAlchemy](https://custom-icon-badges.demolab.com/badge/2.0-ff480d?logo=sqlalchemy&label=SQLAlchemy&style=for-the-badge)
+  [![License](https://custom-icon-badges.demolab.com/badge/MIT-ff480d?logo=law&label=License&style=for-the-badge)](LICENSE)
   
 </h1>
 
@@ -117,5 +117,6 @@ suai-deadline-bot/
     │
     └── config.py          # Файл для хранения настроек (токен бота, данные для БД)
 ```
-
-Special thanks: [@f0rgenet](https://github.com/f0rgenet) - most important back-end help🙏
+## Special thanks
+* [@f0rgenet](https://github.com/f0rgenet) - <b>самая важная</b> помощь с бекендом 🐍🙏
+* @oodwyn - багтестинг, привнесение фичей ✨
