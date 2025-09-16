@@ -6,10 +6,10 @@
     
   SUAI Deadline Bot 🤖🔥
 
-  ![Python](https://custom-icon-badges.demolab.com/badge/3.10+-ff480d?logo=pythonn&label=Python&style=for-the-badge)
-  ![aiogram](https://img.shields.io/badge/aiogram-3.x-ff480d?style=for-the-badge&logo=telegram)
-  ![SQLAlchemy](https://custom-icon-badges.demolab.com/badge/2.0-ff480d?logo=sqlalchemy&label=SQLAlchemy&style=for-the-badge)
-  [![License](https://custom-icon-badges.demolab.com/badge/MIT-ff480d?logo=law&label=License&style=for-the-badge)](LICENSE)
+  ![Python](https://custom-icon-badges.demolab.com/badge/3.10+-ff480d?logo=pythonn&label=Python&labelColor=242523&style=for-the-badge)
+  ![aiogram](https://img.shields.io/badge/aiogram-3.x-ff480d?style=for-the-badge&logo=telegram&labelColor=242523)
+  ![SQLAlchemy](https://custom-icon-badges.demolab.com/badge/2.0-ff480d?logo=sqlalchemy&label=SQLAlchemy&labelColor=242523&style=for-the-badge)
+  [![License](https://custom-icon-badges.demolab.com/badge/MIT-ff480d?logo=law&label=License&labelColor=242523&style=for-the-badge)](LICENSE)
   
 </h1>
 
@@ -34,7 +34,7 @@
 *   **База данных:** [SQLite](https://www.sqlite.org/docs.html) + [SQLAlchemy 2.0](https://docs.sqlalchemy.org/en/20) (ORM) + [Alembic](https://alembic.sqlalchemy.org/en/latest) (миграции)
 *   **Веб-парсинг:** [Requests](https://requests.readthedocs.io/en/latest) + [BeautifulSoup4](https://beautiful-soup-4.readthedocs.io/en/latest)
 *   **Планировщик задач:** [APScheduler](https://apscheduler.readthedocs.io/en/stable/userguide.html)
-*   **Безопасность:** [cryptography](https://cryptography.io/en/latest) (для шифрования учётных данных)
+*   **Безопасность:** [cryptography](https://cryptography.io/en/latest) (шифрование учётных данных)
 
 ## 🚀 Установка и запуск
 
