@@ -10,9 +10,9 @@ from src.parser.scraper import parse_lk_data
 from src.utils.crypto import decrypt_data
 
 
-async def update_all_deadlines():
+async def update_all_deadlines(bot: Bot):
     """
-    Задача для полного обновления дедлайнов для всех пользователей.
+    Задача для полного обновления дедлайнов и уведомления о новых.
     """
     print("SCHEDULER: Запуск задачи обновления дедлайнов...")
     users = await get_all_users()
@@ -29,18 +29,36 @@ async def update_all_deadlines():
         loop = asyncio.get_event_loop()
         parsed_data = await loop.run_in_executor(None, parse_lk_data, login, password)
         if parsed_data:
-            deadlines, _, _ = parsed_data
-        else:
-            deadlines = None
-
-        if deadlines is not None:
-            # Обновление дедлайнов в БД, если парсинг прошёл успешно
-            await update_user_deadlines(user.telegram_id, deadlines)
-            print(f"SCHEDULER: Дедлайны для пользователя {user.telegram_id} успешно обновлены.")
+            deadlines_from_parser, _, _ = parsed_data
         else:
             print(f"SCHEDULER: Не удалось обновить дедлайны для {user.telegram_id} (ошибка парсера).")
+            continue
 
-        # Небольшая задержка, чтобы не перегружать сайт ЛК
+        newly_added = await update_user_deadlines(user.telegram_id, deadlines_from_parser)
+
+        if newly_added:
+            # Список не пустой - появились новые дедлайны
+            print(f"SCHEDULER: Найдено {len(newly_added)} новых дедлайнов для пользователя {user.telegram_id}.")
+            
+            new_deadlines_text = "✨ <b>Обнаружены новые дедлайны!</b>\n\n"
+            for d in newly_added:
+                new_deadlines_text += (
+                    f"📚 <b>{d.course_name}</b>\n"
+                    f"📝 {d.task_name}\n"
+                    f"🗓️ Срок сдачи: {d.due_date.strftime('%d.%m.%Y')}\n\n"
+                )
+            
+            try:
+                await bot.send_message(
+                    chat_id=user.telegram_id, 
+                    text=new_deadlines_text, 
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                print(f"SCHEDULER: Не удалось отправить уведомление о новых дедлайнах {user.telegram_id}. Ошибка: {e}")
+        else:
+            print(f"SCHEDULER: Новых дедлайнов для пользователя {user.telegram_id} не найдено.")
+        
         await asyncio.sleep(5)
 
     print("SCHEDULER: Задача обновления дедлайнов завершена.")

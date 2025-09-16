@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy import select, update, delete, func
 
@@ -72,34 +72,31 @@ async def get_user_by_telegram_id(telegram_id: int):
         return result.scalars().first()
 
 
-async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dict]):
+async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dict]) -> List[Deadline]:
     """
-    "Умно" синхронизирует дедлайны из парсера с базой данных.
-    Не трогает дедлайны, добавленные вручную.
+    "Умно" синхронизирует дедлайны из парсера с базой данных, не трогая дедлайны, добавленные вручную.
+    Возвращает список вновь добавленных дедлайнов.
     """
     async with async_session_factory() as session:
         user = await get_user_by_telegram_id(telegram_id)
         if not user:
-            return
+            return []
 
-        # Поиск всех существующих "парсерных" дедлайнов из БД
+        # Получаение всех существующих "парсерных" дедлайнов из БД (не личных)
         existing_deadlines_query = await session.execute(
-            select(Deadline).where(Deadline.user_id ==user.id, Deadline.is_custom == False)
+            select(Deadline).where(Deadline.user_id == user.id, Deadline.is_custom == False)
         )
         existing_deadlines_list = existing_deadlines_query.scalars().all()
-
-        # Создание множества существующих дедлайнов для быстрой проверки (ключ - предмет+задание)
+        
+        # Создание множества для быстрой проверки (ключ - предмет+задание)
         existing_deadlines_set = {
             (d.course_name, d.task_name): d for d in existing_deadlines_list
         }
-
-        # Создание множества новых дедлайнов из парсера
         parsed_deadlines_set = {
             (d['subject'], d['task']): d for d in new_parsed_deadlines
         }
 
-        # Поиск дедлайнов, которые нужно УДАЛИТЬ
-        # (те, что есть в БД, но которых нет в новом списке из парсера)
+        # Поиск дедлайнов, которые нужно удалить (ЕСТЬ в БД, но НЕТ в парсере)
         to_delete_ids = [
             existing_deadlines_set[key].id
             for key in existing_deadlines_set
@@ -108,28 +105,31 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
         if to_delete_ids:
             await session.execute(delete(Deadline).where(Deadline.id.in_(to_delete_ids)))
 
-        # Поиск дедлайнов, которые нужно ДОБАВИТЬ
-        # (те, что есть в новом списке, но которых нет в БД)
-        to_add_objects = []
+        # Поиск и создание дедлайнов, которые нужно добавить
+        newly_added_deadlines = []
         for key, data in parsed_deadlines_set.items():
             if key not in existing_deadlines_set:
                 try:
                     due_date_obj = datetime.strptime(data['due_date'], "%d.%m.%Y")
                 except ValueError:
                     continue
-                to_add_objects.append(
-                    Deadline(
-                        user_id=user.id,
-                        course_name=data['subject'],
-                        task_name=data['task'],
-                        due_date=due_date_obj,
-                        is_custom=False
-                    )
+                
+                new_deadline_obj = Deadline(
+                    user_id=user.id,
+                    course_name=data['subject'],
+                    task_name=data['task'],
+                    due_date=due_date_obj,
+                    is_custom=False
                 )
-        if to_add_objects:
-            session.add_all(to_add_objects)
+                newly_added_deadlines.append(new_deadline_obj)
+        
+        if newly_added_deadlines:
+            session.add_all(newly_added_deadlines)
 
         await session.commit()
+        
+        # Возврат списка только что добавленных объектов
+        return newly_added_deadlines
 
 
 async def get_users_with_upcoming_deadlines(days: int):

@@ -16,7 +16,6 @@ async def set_main_menu_commands(bot: Bot):
     """
     Создаёт и устанавливает меню с командами для бота.
     """
-    # Создаем список команд с описаниями
     main_menu_commands = [
         BotCommand(command="/start", description="Запустить/перезапустить бота"),
         BotCommand(command="/add", description="Добавить дедлайн вручную"),
@@ -25,8 +24,6 @@ async def set_main_menu_commands(bot: Bot):
         BotCommand(command="/cancel", description="Отменить текущее действие"),
         BotCommand(command="/stop", description="❌ Остановить работу бота и удалить свои данные ❌")
     ]
-    
-    # Устанавливаем команды для бота
     await bot.set_my_commands(main_menu_commands)
 
 
@@ -53,8 +50,8 @@ async def main():
     # Инициализиация планировщика
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 
-    # Добавление задачи на обновление дедлайнов ('interval' - запускать с интервалом)
-    scheduler.add_job(update_all_deadlines, trigger='interval', hours=1)
+    # Добавление задачи на обновление дедлайнов
+    scheduler.add_job(update_all_deadlines, trigger='interval', hours=1, args=(bot,))
 
     # Добавление задачи на отправку уведомлений
     scheduler.add_job(send_deadline_notifications, trigger='interval', hours=1, args=(bot,))
