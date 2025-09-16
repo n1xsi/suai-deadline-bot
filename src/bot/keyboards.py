@@ -125,8 +125,7 @@ def get_notification_settings_keyboard(user: User):
     day_buttons = []
     for day in possible_days:
         text = f"✅ за {day} д." if day in user_days else f"🔕 за {day} д."
-        day_buttons.append(InlineKeyboardButton(
-            text=text, callback_data=f"toggle_day_{day}"))
+        day_buttons.append(InlineKeyboardButton(text=text, callback_data=f"toggle_day_{day}"))
 
     # Ряд с кнопками дней
     builder.row(*day_buttons)
@@ -135,7 +134,7 @@ def get_notification_settings_keyboard(user: User):
 
 def get_pagination_keyboard(current_page: int, total_pages: int):
     """
-    Создает клавиатуру для пагинации (Вперёд/Назад).
+    Создаёт клавиатуру для пагинации (Вперёд/Назад).
     """
     builder = InlineKeyboardBuilder()
     
