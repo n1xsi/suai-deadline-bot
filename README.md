@@ -48,16 +48,6 @@
 *   **Шифрование:** Логин и пароль от личного кабинета каждого пользователя хранятся в базе данных в **зашифрованном** виде с использованием надёжной криптографической библиотеки.
 *   **Приватность:** Бот удаляет сообщение с паролем сразу после его отправки пользователем, не оставляя его в истории чата.
 
-## 🛠 Технологический стек
-
-*   **Язык:** [Python 3.12.5](https://www.python.org/downloads/release/python-3125)
-*   **Асинхронный фреймворк:** [asyncio](https://docs.python.org/3/library/asyncio.html)
-*   **Telegram Bot API:** [aiogram 3.x](https://docs.aiogram.dev/en/v3.22.0)
-*   **База данных:** [SQLite](https://www.sqlite.org/docs.html) + [SQLAlchemy 2.0](https://docs.sqlalchemy.org/en/20) (ORM) + [Alembic](https://alembic.sqlalchemy.org/en/latest) (миграции)
-*   **Веб-парсинг:** [Requests](https://requests.readthedocs.io/en/latest) + [BeautifulSoup4](https://beautiful-soup-4.readthedocs.io/en/latest)
-*   **Планировщик задач:** [APScheduler](https://apscheduler.readthedocs.io/en/stable/userguide.html)
-*   **Безопасность:** [cryptography](https://cryptography.io/en/latest) (шифрование учётных данных)
-
 ## 🚀 Установка и запуск
 
 1.  **Клонирование репозитория:**
@@ -148,6 +138,16 @@ suai-deadline-bot/
 *   **`utils`**: Вспомогательные модули, используемые разными частями приложения ().
 *   **`main_bot.py`**: **Контроллер/Точка входа**, который инициализирует и связывает все компоненты вместе.
 
+## 🛠 Технологический стек
+
+*   **Язык:** [Python 3.12.5](https://www.python.org/downloads/release/python-3125)
+*   **Асинхронный фреймворк:** [asyncio](https://docs.python.org/3/library/asyncio.html)
+*   **Telegram Bot API:** [aiogram 3.x](https://docs.aiogram.dev/en/v3.22.0)
+*   **База данных:** [SQLite](https://www.sqlite.org/docs.html) + [SQLAlchemy 2.0](https://docs.sqlalchemy.org/en/20) (ORM) + [Alembic](https://alembic.sqlalchemy.org/en/latest) (миграции)
+*   **Веб-парсинг:** [Requests](https://requests.readthedocs.io/en/latest) + [BeautifulSoup4](https://beautiful-soup-4.readthedocs.io/en/latest)
+*   **Планировщик задач:** [APScheduler](https://apscheduler.readthedocs.io/en/stable/userguide.html)
+*   **Безопасность:** [cryptography](https://cryptography.io/en/latest) (шифрование учётных данных)
+
 ## ☺️ Special thanks
 * [@f0rgenet](https://github.com/f0rgenet) - <b>важная</b> помощь с бекендом 🐍🙏
-* @oodwyn - багтестинг, привнесение фичей ✨
+* @oodwyn - тестирование, багрепорты, привнесение фичей ✨
