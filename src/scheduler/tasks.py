@@ -43,9 +43,9 @@ async def update_all_deadlines(bot: Bot):
             new_deadlines_text = "✨ <b>Обнаружены новые дедлайны!</b>\n\n"
             for d in newly_added:
                 new_deadlines_text += (
-                    f"📚 <b>{d.course_name}</b>\n"
-                    f"📝 {d.task_name}\n"
-                    f"🗓️ Срок сдачи: {d.due_date.strftime('%d.%m.%Y')}\n\n"
+                    f"📚 <b>{d['course_name']}</b>\n"
+                    f"📝 {d['task_name']}\n"
+                    f"🗓️ Срок сдачи: {d['due_date'].strftime('%d.%m.%Y')}\n\n"
                 )
             
             try:

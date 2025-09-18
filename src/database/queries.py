@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from sqlalchemy import select, update, delete, func
 
@@ -72,10 +72,10 @@ async def get_user_by_telegram_id(telegram_id: int):
         return result.scalars().first()
 
 
-async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dict]) -> List[Deadline]:
+async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dict]) -> List[Dict]:
     """
     "Умно" синхронизирует дедлайны из парсера с базой данных, не трогая дедлайны, добавленные вручную.
-    Возвращает список вновь добавленных дедлайнов.
+    Возвращает список словарей с данными о вновь добавленных дедлайнах.
     """
     async with async_session_factory() as session:
         user = await get_user_by_telegram_id(telegram_id)
@@ -106,7 +106,9 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
             await session.execute(delete(Deadline).where(Deadline.id.in_(to_delete_ids)))
 
         # Поиск и создание дедлайнов, которые нужно добавить
-        newly_added_deadlines = []
+        newly_added_deadlines_data = []
+        objects_to_add_in_db = []
+
         for key, data in parsed_deadlines_set.items():
             if key not in existing_deadlines_set:
                 try:
@@ -114,22 +116,29 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
                 except ValueError:
                     continue
                 
-                new_deadline_obj = Deadline(
-                    user_id=user.id,
-                    course_name=data['subject'],
-                    task_name=data['task'],
-                    due_date=due_date_obj,
-                    is_custom=False
+                # Сохранение данных о новом дедлайне
+                newly_added_deadlines_data.append({
+                    'course_name': data['subject'],
+                    'task_name': data['task'],
+                    'due_date': due_date_obj
+                })
+                
+                # Создание объекта для добавления в БД
+                objects_to_add_in_db.append(
+                    Deadline(
+                        user_id=user.id,
+                        course_name=data['subject'],
+                        task_name=data['task'],
+                        due_date=due_date_obj,
+                        is_custom=False
+                    )
                 )
-                newly_added_deadlines.append(new_deadline_obj)
         
-        if newly_added_deadlines:
-            session.add_all(newly_added_deadlines)
+        if objects_to_add_in_db:
+            session.add_all(objects_to_add_in_db)
 
         await session.commit()
-        
-        # Возврат списка только что добавленных объектов
-        return newly_added_deadlines
+        return newly_added_deadlines_data
 
 
 async def get_users_with_upcoming_deadlines(days: int):
