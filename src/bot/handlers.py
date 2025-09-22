@@ -31,7 +31,7 @@ import asyncio
 # Хендлер - это функция, которая обрабатывает входящие сообщения и команды.
 router = Router()
 
-PAGE_SIZE = 5 # Количество дедлайнов на одной странице
+PAGE_SIZE = 5  # Количество дедлайнов на одной странице
 
 
 @router.message(InStateFilter(), F.text.in_({"🚨 Посмотреть дедлайны", "🔔 Настройка напоминаний", "👤 Мой профиль", "🛠️ Настройка дедлайнов"}))
@@ -65,9 +65,9 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
     help_text = (
-        "Я бот-помощник для студентов ГУАП. Что я умею:\n\n"
+        "🤖 Я бот-помощник для студентов ГУАП. Что я умею:\n\n"
         "✅ <b>Автоматически</b> проверяю ваш личный кабинет и присылаю уведомления о дедлайнах.\n"
-        "✅ По команде /status или кнопке <b>'Посмотреть дедлайны'</b> показываю все актуальные задачи.\n\n"
+        "✅ По команде /status или кнопке <b>'🚨 Посмотреть дедлайны'</b> показываю все актуальные задачи.\n\n"
         "Доступные команды:\n"
         "/start — Начать работу, запуск/переапуск бота\n"
         "/status — Показать дедлайны\n"
@@ -82,8 +82,7 @@ async def cmd_help(message: types.Message):
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
     """Обработчик команды /start."""
-    # /start всегда сбрасывает состояние и ведёт в главное меню
-    await state.clear() 
+    await state.clear() # Команда /start сбрасывает состояние и ведёт в главное меню
 
     is_new = await add_user(telegram_id=message.from_user.id, username=message.from_user.username)
 
@@ -91,7 +90,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
         await message.answer(
             "Привет! Я бот для отслеживания дедлайнов в лк ГУАП.\n"
             "🥸 Вижу, ты здесь впервые. Давай пройдем регистрацию!\n\n"
-            "[1️⃣/2️⃣] Отправь мне свой логин/почту от личного кабинета.",
+            "[1️⃣/2️⃣] Отправь мне свой логин/почту от личного кабинета:",
             reply_markup=get_cancel_keyboard()
         )
         await state.set_state(Registration.waiting_for_login)
@@ -106,7 +105,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 @router.message(Registration.waiting_for_login, F.text)
 async def process_login(message: types.Message, state: FSMContext):
     await state.update_data(login=message.text)
-    await message.answer("[2️⃣/2️⃣] Отлично! Теперь введи свой пароль.")
+    await message.answer("[2️⃣/2️⃣] Отлично! Теперь введи свой пароль:")
     await state.set_state(Registration.waiting_for_password)
 
 
@@ -116,17 +115,17 @@ async def process_password(message: types.Message, state: FSMContext):
     login = user_data.get('login')
     password = message.text
 
-    await message.delete()  # Удаление сообщения с паролем (для безопасности)
-    
-    msg_to_delete = await message.answer("Пытаюсь войти в личный кабинет, это может занять минуту...")
+    await message.delete() # Удаление сообщения с паролем для безопасности
+
+    msg_to_delete = await message.answer("🔐 Пытаюсь войти в личный кабинет, это может занять минуту...")
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing") # Показ "печатает..."
 
-    # Парсер - синхронный (использует requests), а бот - асинхронный.
-    # Поэтому запуск парсера происходит в отдельном потоке, чтобы не блокировать бота.
+    # Парсер - синхронный (использует requests), а бот - асинхронный
+    # Поэтому запуск парсера происходит в отдельном потоке, чтобы не блокировать бота
     loop = asyncio.get_event_loop()
     parsed_data = await loop.run_in_executor(None, parse_lk_data, login, password)
 
-    await msg_to_delete.delete()  # Удаление сообщения "Пытаюсь войти..."
+    await msg_to_delete.delete()  # Удаление сообщения "Пытаюсь войти ..."
 
     if parsed_data is None:
         await message.answer(
@@ -137,10 +136,8 @@ async def process_password(message: types.Message, state: FSMContext):
         await state.set_state(Registration.waiting_for_login)
         return
 
-    # Распаковка результата
     new_parsed_deadlines, profile_id, full_name = parsed_data
 
-    # Сохранение учётных данных в БД
     await set_user_credentials(
         telegram_id=message.from_user.id,
         login=login,
@@ -172,6 +169,7 @@ async def process_password(message: types.Message, state: FSMContext):
 # -------------------------------------------------------------------------------------------
 # Основные команды меню
 
+
 def format_deadlines_page(deadlines: list, page: int, page_size: int = 5) -> str:
     """
     Формирует текст одной страницы со списком дедлайнов.
@@ -192,11 +190,11 @@ def format_deadlines_page(deadlines: list, page: int, page_size: int = 5) -> str
     return deadlines_text
 
 
-# Команда "/status" и кнопка "Посмотреть дедлайны"
+# Команда "/status", кнопка "Посмотреть дедлайны"
 @router.message(Command("status"))
 @router.message(F.text == "🚨 Посмотреть дедлайны")
 async def show_deadlines(message: types.Message):
-    """Показывает ПЕРВУЮ страницу со списком дедлайнов."""
+    """Показывает первую страницу со списком дедлайнов."""
     deadlines = await get_user_deadlines_from_db(message.from_user.id)
     if not deadlines:
         await message.answer(
@@ -244,23 +242,23 @@ async def show_profile(message: types.Message):
         profile_text += f"\n📌 из них <i>личных</i>: <b>{custom_count}</b>"
 
     await message.answer(
-        profile_text, 
+        profile_text,
         reply_markup=get_profile_keyboard(custom_deadlines_count=custom_count),
         parse_mode="HTML"
     )
 
 
-# Команда "/stop" для удаления данных
+# Команда "/stop"
 @router.message(Command("stop"))
 async def cmd_stop(message: types.Message):
     await message.answer(
         "Вы уверены, что хотите отписаться и удалить все свои данные?\n"
         "Это действие <b><u>необратимо</u></b>.",
         reply_markup=get_confirm_keyboard(
-        confirm_text="Да, удалить",
-        confirm_callback="confirm_delete",
-        cancel_text="Нет, оставить",
-        cancel_callback="cancel_delete"
+            confirm_text="Да, удалить",
+            confirm_callback="confirm_delete",
+            cancel_text="Нет, оставить",
+            cancel_callback="cancel_delete"
         ),
         parse_mode="HTML"
     )
@@ -303,13 +301,13 @@ async def update_notification_settings_menu(callback: CallbackQuery):
 @router.message(F.text == "🛠️ Настройка дедлайнов")
 async def settings_deadlines_menu(message: types.Message):
     deadlines = await get_user_deadlines_from_db(message.from_user.id)
-    
+
     await message.answer(
         "🔧 Здесь вы можете управлять дедлайнами:\n"
         "добавлять собственные или удалять уже имеющиеся",
         reply_markup=get_deadlines_settings_keyboard(
-            deadlines, 
-            current_page=0, 
+            deadlines,
+            current_page=0,
             page_size=PAGE_SIZE
         )
     )
@@ -321,7 +319,7 @@ async def settings_deadlines_menu(message: types.Message):
 @router.callback_query(F.data.startswith("page_"))
 async def deadlines_page_callback(callback: CallbackQuery):
     """
-    Обрабатывает переключение страниц в списке дедлайнов.
+    Хэндлер, обрабатывающий переключение страниц в списке дедлайнов.
     """
     page = int(callback.data.split("_")[1])
 
@@ -345,15 +343,15 @@ async def deadlines_page_callback(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("settings_page_"))
 async def settings_page_callback(callback: CallbackQuery):
     """
-    Обрабатывает переключение страниц в меню настройки дедлайнов.
+    Хэндлер, обрабатывающий переключение страниц в меню настройки дедлайнов.
     """
     page = int(callback.data.split("_")[2])
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
-        
+
     await callback.message.edit_reply_markup(
         reply_markup=get_deadlines_settings_keyboard(
-            deadlines, 
-            current_page=page, 
+            deadlines,
+            current_page=page,
             page_size=PAGE_SIZE
         )
     )
@@ -362,20 +360,21 @@ async def settings_page_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "ignore")
 async def ignore_callback(callback: CallbackQuery):
-    """Пустой хэндлер, чтобы нажатие на кнопку не делало ничего."""
+    """Пустой хэндлер, чтобы нажатие на кнопку ничего не делало."""
     await callback.answer()
 
 
 @router.callback_query(F.data == "delete_my_data")
 async def on_delete_data(callback: CallbackQuery):
+    """Хэндлер, запрашивающий подтверждение на удаление всех личных данных."""
     await callback.message.edit_text(
         "🗑️ Вы уверены, что хотите отписаться и удалить все свои данные?\n"
         "❗️ Это действие <b><u>необратимо</u></b>.",
         reply_markup=get_confirm_keyboard(
-        confirm_text="Да, удалить",
-        confirm_callback="confirm_delete",
-        cancel_text="Нет, оставить",
-        cancel_callback="cancel_delete"
+            confirm_text="Да, удалить",
+            confirm_callback="confirm_delete",
+            cancel_text="Нет, оставить",
+            cancel_callback="cancel_delete"
         ),
         parse_mode="HTML"
     )
@@ -384,6 +383,7 @@ async def on_delete_data(callback: CallbackQuery):
 
 @router.callback_query(F.data == "confirm_delete")
 async def on_confirm_delete(callback: CallbackQuery):
+    """Хэндлер, обрабатывающий подтверждение на удаление всех личных данных."""
     deleted = await delete_user_data(callback.from_user.id)
     if deleted:
         # Удаление клавиатуры главного меню
@@ -404,6 +404,7 @@ async def on_confirm_delete(callback: CallbackQuery):
 
 @router.callback_query(F.data == "cancel_delete")
 async def on_cancel_delete(callback: CallbackQuery):
+    """Хэндлер, обрабатывающий отмену удаления."""
     await callback.message.edit_text("❕ Удаление отменено.", reply_markup=None)
     await callback.answer()
 
@@ -411,13 +412,13 @@ async def on_cancel_delete(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("del_deadline_"))
 async def delete_deadline_confirm_callback(callback: CallbackQuery):
     """
-    Этот хэндлер запрашивает подтверждение на удаление дедлайна.
+    Хэндлер, запрашивающий подтверждение на удаление дедлайна.
     """
     deadline_id = int(callback.data.split("_")[2])
     deadline = await get_deadline_by_id(deadline_id)
 
     if not deadline:
-        await callback.answer("Этот дедлайн уже удален.", show_alert=True)
+        await callback.answer("Этот дедлайн уже удалён!", show_alert=True)
         return
 
     text = (
@@ -430,10 +431,10 @@ async def delete_deadline_confirm_callback(callback: CallbackQuery):
     await callback.message.edit_text(
         text,
         reply_markup=get_confirm_keyboard(
-        confirm_text="Да, удалить",
-        confirm_callback=f"confirm_del_deadline_{deadline_id}",
-        cancel_text="Нет, оставить",
-        cancel_callback="cancel_del_deadline"
+            confirm_text="Да, удалить",
+            confirm_callback=f"confirm_del_deadline_{deadline_id}",
+            cancel_text="Нет, оставить",
+            cancel_callback="cancel_del_deadline"
         ),
         parse_mode="HTML"
     )
@@ -453,7 +454,7 @@ async def confirm_delete_deadline_callback(callback: CallbackQuery):
     await callback.message.edit_text(
         "🚮 Дедлайн удален. Вот обновленный список:",
         reply_markup=get_deadlines_settings_keyboard(
-            deadlines, 
+            deadlines,
             current_page=0, # Возврат на первую страницу
             page_size=PAGE_SIZE
         )
@@ -471,7 +472,7 @@ async def cancel_delete_deadline_callback(callback: CallbackQuery):
     await callback.message.edit_text(
         "❕ Удаление отменено. Вы снова в меню управления дедлайнами.",
         reply_markup=get_deadlines_settings_keyboard(
-            deadlines, 
+            deadlines,
             current_page=0, # Возврат на первую страницу
             page_size=PAGE_SIZE
         )
@@ -490,19 +491,19 @@ async def toggle_day_callback(callback: CallbackQuery):
     day = int(callback.data.split("_")[2])
     await update_notification_days(callback.from_user.id, day)
     await update_notification_settings_menu(callback)
-    
+
 
 @router.callback_query(F.data == "delete_all_custom")
 async def on_delete_all_custom(callback: CallbackQuery):
-    """Запрашивает подтверждение на удаление всех личных дедлайнов."""
+    """Хэндлер, запрашивающий подтверждение на удаление всех личных дедлайнов."""
     await callback.message.edit_text(
         "Вы уверены, что хотите удалить <b><u>ВСЕ</u></b> ваши личные дедлайны?\n"
         "Это действие необратимо!",
         reply_markup=get_confirm_keyboard(
-        confirm_text="Да, удалить все",
-        confirm_callback="confirm_delete_all_custom",
-        cancel_text="Нет, отмена",
-        cancel_callback="cancel_delete_all_custom"
+            confirm_text="Да, удалить все",
+            confirm_callback="confirm_delete_all_custom",
+            cancel_text="Нет, отмена",
+            cancel_callback="cancel_delete_all_custom"
         ),
         parse_mode="HTML"
     )
@@ -511,9 +512,9 @@ async def on_delete_all_custom(callback: CallbackQuery):
 
 @router.callback_query(F.data == "confirm_delete_all_custom")
 async def on_confirm_delete_all_custom(callback: CallbackQuery):
-    """Удаляет все личные дедлайны."""
+    """Хендлер, обрабатывающий подтверждение на удаление всех личных дедлайнов."""
     await delete_all_custom_deadlines(callback.from_user.id)
-    await callback.message.delete() # Удаление сообщения с кнопкой подтверждения
+    await callback.message.delete()  # Удаление сообщения с кнопкой подтверждения
     await callback.message.answer(
         "✅ Все ваши <b>личные</b> дедлайны были удалены (вузовские не затронуты).",
         parse_mode="HTML"
@@ -524,7 +525,7 @@ async def on_confirm_delete_all_custom(callback: CallbackQuery):
 @router.callback_query(F.data == "cancel_delete_all_custom")
 async def on_cancel_delete_all_custom(callback: CallbackQuery):
     """Отменяет удаление и возвращает в профиль."""
-    await callback.message.delete() # Удаление сообщения с кнопкой подтверждения
+    await callback.message.delete()  # Удаление сообщения с кнопкой подтверждения
     # Показ профиля заново, чтобы пользователь не потерялся
     await show_profile(callback.message)
     await callback.answer()
@@ -587,7 +588,7 @@ async def add_deadline_start(event: Union[types.Message, CallbackQuery], state: 
         await event.message.delete()
         # Отправление нового сообщения с кнопкой отмены
         await event.message.answer(text, reply_markup=get_cancel_keyboard())
-        # Ответ на callback, чтобы убрать "часики"
+        # Ответ на callback, чтобы убрать "часики" у сообщения
         await event.answer()
 
     # Установка состояния в любом случае

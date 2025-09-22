@@ -37,9 +37,9 @@ async def update_all_deadlines(bot: Bot):
         newly_added = await update_user_deadlines(user.telegram_id, deadlines_from_parser)
 
         if newly_added:
-            # Список не пустой - появились новые дедлайны
+            # Если список не пустой, значит появились новые дедлайны
             print(f"SCHEDULER: Найдено {len(newly_added)} новых дедлайнов для пользователя {user.telegram_id}.")
-            
+
             new_deadlines_text = "✨ <b>Обнаружены новые дедлайны!</b>\n\n"
             for d in newly_added:
                 new_deadlines_text += (
@@ -47,18 +47,18 @@ async def update_all_deadlines(bot: Bot):
                     f"📝 {d['task_name']}\n"
                     f"🗓️ Срок сдачи: {d['due_date'].strftime('%d.%m.%Y')}\n\n"
                 )
-            
+
             try:
                 await bot.send_message(
-                    chat_id=user.telegram_id, 
-                    text=new_deadlines_text, 
+                    chat_id=user.telegram_id,
+                    text=new_deadlines_text,
                     parse_mode="HTML"
                 )
             except Exception as e:
                 print(f"SCHEDULER: Не удалось отправить уведомление о новых дедлайнах {user.telegram_id}. Ошибка: {e}")
         else:
             print(f"SCHEDULER: Новых дедлайнов для пользователя {user.telegram_id} не найдено.")
-        
+
         await asyncio.sleep(5)
 
     print("SCHEDULER: Задача обновления дедлайнов завершена.")
@@ -80,8 +80,8 @@ async def send_deadline_notifications(bot: Bot):
         if not user_deadlines:
             continue
 
-        # Логика для ЕЖЕДНЕВНЫХ уведомлений
-        if user.notification_days and current_hour == 9: # Отправляем ежедневные в 9:00
+        # Логика для ежедневных уведомлений
+        if user.notification_days and current_hour == 9:  # Отправка ежедневных в 9:00
             notification_days_set = set(map(int, user.notification_days.split(',')))
             today = datetime.now().date()
             for deadline in user_deadlines:
@@ -97,11 +97,11 @@ async def send_deadline_notifications(bot: Bot):
                         await bot.send_message(chat_id=user.telegram_id, text=text, parse_mode="HTML")
                         print(f"SCHEDULER: Отправлено ЕЖЕДНЕВНОЕ уведомление пользователю {user.telegram_id}.")
                         notification_sent_this_run = True
-                        break # Отправляем только одно ежедневное уведомление за раз
+                        break  # Отправка только одного ежедневного уведомления за раз
                     except Exception as e:
                         print(f"SCHEDULER: Не удалось отправить уведомление {user.telegram_id}. Ошибка: {e}")
 
-        # Логика для ЧАСТЫХ (часовых) уведомлений
+        # Логика для частых (часовых) уведомлений
         interval = user.notification_interval_hours
         if interval > 0 and current_hour % interval == 0 and not notification_sent_this_run:
             deadlines_text = "⏰ <b>Часовое напоминание!</b>\n\nВаши активные дедлайны:\n\n"
@@ -112,6 +112,6 @@ async def send_deadline_notifications(bot: Bot):
                 print(f"SCHEDULER: Отправлено ЧАСТОЕ уведомление пользователю {user.telegram_id}.")
             except Exception as e:
                 print(f"SCHEDULER: Не удалось отправить уведомление {user.telegram_id}. Ошибка: {e}")
-        
+
         await asyncio.sleep(1)
     print("SCHEDULER: Задача отправки уведомлений завершена.")

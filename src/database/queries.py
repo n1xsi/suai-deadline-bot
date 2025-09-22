@@ -14,12 +14,10 @@ async def add_user(telegram_id: int, username: str | None = None):
     Возвращает True, если пользователь был добавлен, False - если уже существует.
     """
     async with async_session_factory() as session:
-        # Проверка, есть ли уже пользователь с таким telegram_id
         result = await session.execute(select(User).where(User.telegram_id == telegram_id))
         if result.scalars().first():
-            return False  # Пользователь уже существует
+            return False
 
-        # Такого пользователя нет - нужно добавить
         new_user = User(telegram_id=telegram_id, username=username)
         session.add(new_user)
         await session.commit()
@@ -27,10 +25,10 @@ async def add_user(telegram_id: int, username: str | None = None):
 
 
 async def set_user_credentials(
-    telegram_id: int, 
-    login: str, 
-    password: str, 
-    profile_id: Optional[str] = None, 
+    telegram_id: int,
+    login: str,
+    password: str,
+    profile_id: Optional[str] = None,
     full_name: Optional[str] = None
 ):
     """Шифрует и сохраняет учётные данные, ID профиля и ФИО пользователя в БД."""
@@ -87,7 +85,7 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
             select(Deadline).where(Deadline.user_id == user.id, Deadline.is_custom == False)
         )
         existing_deadlines_list = existing_deadlines_query.scalars().all()
-        
+
         # Создание множества для быстрой проверки (ключ - предмет+задание)
         existing_deadlines_set = {
             (d.course_name, d.task_name): d for d in existing_deadlines_list
@@ -115,14 +113,14 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
                     due_date_obj = datetime.strptime(data['due_date'], "%d.%m.%Y")
                 except ValueError:
                     continue
-                
+
                 # Сохранение данных о новом дедлайне
                 newly_added_deadlines_data.append({
                     'course_name': data['subject'],
                     'task_name': data['task'],
                     'due_date': due_date_obj
                 })
-                
+
                 # Создание объекта для добавления в БД
                 objects_to_add_in_db.append(
                     Deadline(
@@ -133,7 +131,7 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
                         is_custom=False
                     )
                 )
-        
+
         if objects_to_add_in_db:
             session.add_all(objects_to_add_in_db)
 
@@ -172,14 +170,14 @@ async def get_user_stats(telegram_id: int) -> dict:
         )
         all_active_count = await session.execute(all_active_query)
 
-        # Подсчёт личных дедлайнов ---
+        # Подсчёт личных дедлайнов
         custom_active_query = select(func.count(Deadline.id)).where(
             Deadline.user_id == user.id,
             Deadline.due_date >= datetime.now().date(),
             Deadline.is_custom == True
         )
         custom_active_count = await session.execute(custom_active_query)
-        
+
         return {
             "active_deadlines": all_active_count.scalar_one_or_none() or 0,
             "custom_deadlines": custom_active_count.scalar_one_or_none() or 0
@@ -196,7 +194,7 @@ async def delete_user_data(telegram_id: int):
         if user:
             # Удаление связанных дедлайнов
             await session.execute(delete(Deadline).where(Deadline.user_id == user.id))
-            # Затем удаление пользователя
+            # Удаление пользователя
             await session.execute(delete(User).where(User.telegram_id == telegram_id))
             await session.commit()
             return True
@@ -237,7 +235,7 @@ async def add_custom_deadline(telegram_id: int, course: str, task: str, due_date
         session.add(new_deadline)
         await session.commit()
         return new_deadline
-    
+
 
 async def get_deadline_by_id(deadline_id: int):
     """Возвращает объект дедлайна по его ID."""
@@ -312,7 +310,7 @@ async def delete_all_custom_deadlines(telegram_id: int):
         user = await get_user_by_telegram_id(telegram_id)
         if not user:
             return False
-        
+
         query = delete(Deadline).where(
             Deadline.user_id == user.id,
             Deadline.is_custom == True
