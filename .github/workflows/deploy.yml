@@ -50,7 +50,7 @@ jobs:
             cd "$REPO_DIR"
 
             # Update env file
-            echo "${{ secrets.ENV_FILE_CONTENT }}" > .env
+            printf "%s" "${{ secrets.ENV_FILE_CONTENT }}" > "$HOME/suai-deadline-bot/.env"
 
             # Pull latest image
             docker pull "$IMAGE"
