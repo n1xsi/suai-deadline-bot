@@ -13,7 +13,11 @@ from src.utils.crypto import decrypt_data
 
 async def update_user_deadlines_and_notify(bot: Bot, user_id: int, force_notify: bool = False):
     """
-    Задача для обновления дедлайнов пользователя.
+    Задача для обновления дедлайнов пользователя
+
+    :param bot: Бот для отправки уведомлений
+    :param user_id: ID пользователя
+    :param force_notify: Флаг, указывающий, будет ли отправляться уведомление если дедлайны не обновились
     """
     logger.info(f"Запуск задачи обновления дедлайнов пользователя {user_id}...")
 

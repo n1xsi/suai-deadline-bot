@@ -86,27 +86,40 @@ async def cmd_help(message: types.Message):
 @router.message(Command("update"))
 async def cmd_update(message: types.Message, state: FSMContext, bot: Bot):
     """Обработчик команды /update, обновляет дедлайны пользователя"""
-    await update_user_deadlines_and_notify(bot, message.from_user.id, force_notify=True)
-    logger.info(f"Пользователь {message.from_user.id} обновил дедлайны с помощью команды '/update'")
+    if not message.from_user:
+        logger.warning(f"Пользователь {message.from_user} не найден при попытке обновить дедлайны")
+        return
+    user_id = message.from_user.id
+    if not await check_lk_auth(user_id):
+        await message.answer("⛔ Не удалось обновить дедлайны, вы не авторизованы в личный кабинет!")
+        await start_login(bot, user_id, state)
+        return
+    await update_user_deadlines_and_notify(bot, user_id, force_notify=True)
+    logger.info(f"Пользователь {user_id} обновил дедлайны с помощью команды '/update'")
 
+
+async def start_login(bot: Bot, chat_id: int, state: FSMContext):
+    await state.set_state(Registration.waiting_for_login)
+    logger.info(f"Пользователь {chat_id} регистрируется")
+    await bot.send_message(
+        chat_id=chat_id,
+        text="Привет! Я бот для отслеживания дедлайнов в лк ГУАП.\n"
+            "🥸 Вижу, ты здесь впервые. Давай пройдем регистрацию!\n\n"
+            "[1️⃣/2️⃣] Отправь мне свой логин/почту от личного кабинета:",
+        reply_markup=get_cancel_keyboard()
+    )
+    
 
 # Хэндлер, который срабатывает на "/start"
 @router.message(CommandStart())
-async def cmd_start(message: types.Message, state: FSMContext):
+async def cmd_start(message: types.Message, state: FSMContext, bot: Bot):
     """Обработчик команды /start."""
     await state.clear() # Команда /start сбрасывает состояние и ведёт в главное меню
 
     is_new = await add_user(telegram_id=message.from_user.id, username=message.from_user.username)
 
     if is_new:
-        await message.answer(
-            "Привет! Я бот для отслеживания дедлайнов в лк ГУАП.\n"
-            "🥸 Вижу, ты здесь впервые. Давай пройдем регистрацию!\n\n"
-            "[1️⃣/2️⃣] Отправь мне свой логин/почту от личного кабинета:",
-            reply_markup=get_cancel_keyboard()
-        )
-        await state.set_state(Registration.waiting_for_login)
-        logger.info(f"Пользователь {message.from_user.id} регистрируется")
+        await start_login(bot, message.from_user.id, state)
     else:
         await message.answer(
             "😊 С возвращением! Я уже знаю тебя!\n"
@@ -219,7 +232,7 @@ async def show_deadlines(message: types.Message):
     if not deadlines:
         await message.answer(
             "🕳 У вас пока нет предстоящих дедлайнов в базе.\n"
-            "⏰ Обновление происходит автоматически <u>раз в час</u>."
+            "⏰ Обновление происходит автоматически <u>раз в час</u>.\n"
             "🧲 Вы можете запросить обновление дедлайнов с помощью кнопки 'Обновить' или набрав команду '/update'.",
             parse_mode="HTML",
             reply_markup=get_update_button(message.from_user.id),
@@ -376,8 +389,14 @@ async def deadlines_page_callback(callback: CallbackQuery):
     )
     await callback.answer()
 
+async def check_lk_auth(user_id: int):
+    user = await get_user_by_telegram_id(user_id)
+    if not user:
+        return False
+    return bool(user.encrypted_login_lk and user.encrypted_password_lk)
+
 @router.callback_query(F.data.startswith("update_"))
-async def update_deadlines_callback(callback: CallbackQuery, bot: Bot):
+async def update_deadlines_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """
     Хэндлер, обрабатывающий кнопку обновления дедлайнов.
     """
@@ -385,6 +404,10 @@ async def update_deadlines_callback(callback: CallbackQuery, bot: Bot):
         logger.error("Не удалось обработать callback-запрос для обработки кнопки обновления дедлайнов")
         return
     user_id = int(callback.data.split("_")[1])
+    if not await check_lk_auth(user_id):
+        await callback.answer("⛔ Не удалось обновить дедлайны, вы не авторизованы в личный кабинет!")
+        await start_login(bot, user_id, state)
+        return
     await update_user_deadlines_and_notify(bot, user_id, force_notify=True)
     await callback.answer()
 
