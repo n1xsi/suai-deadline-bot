@@ -123,6 +123,12 @@ def _extract_deadlines(session: requests.Session) -> Optional[List[Dict[str, str
         tasks_url = f"{BASE_URL}/inside/student/tasks/?semester={current_semester_id}&subject=0&type=0&showStatus=1&perPage=200"
         response = session.get(tasks_url)
         response.raise_for_status()
+        
+        # --- ВРЕМЕННЫЙ КОД ДЛЯ ОТЛАДКИ ---
+        with open("tasks_page.html", "w", encoding="utf-8") as f:
+            f.write(response.text)
+        print("!!! ОТЛАДКА: HTML-код страницы с заданиями сохранен в файл tasks_page.html !!!")
+        # ---------------------------------
 
         soup = BeautifulSoup(response.text, 'html.parser')
         deadlines = []
