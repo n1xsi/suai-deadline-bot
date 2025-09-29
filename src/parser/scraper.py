@@ -1,10 +1,10 @@
-from bs4 import BeautifulSoup
-from typing import List, Dict, Optional, Tuple
-
 from datetime import date
-
 import requests
 import re
+
+from bs4 import BeautifulSoup
+from loguru import logger
+from typing import List, Dict, Optional, Tuple
 
 BASE_URL = "https://pro.guap.ru"
 
@@ -40,6 +40,8 @@ def _get_current_semester_id() -> Tuple[int, str]:
     else:  
         semester_name = f"{study_year_str} осенний"
 
+    logger.success(f"Вычислен ID семестра: {semester_id}, название: {semester_name}")
+
     return semester_id, semester_name
 
 
@@ -65,7 +67,7 @@ def _perform_login(session: requests.Session, username: str, password: str) -> b
         soup = BeautifulSoup(login_page_response.text, 'html.parser')
         form = soup.find('form', id='kc-form-login')
         if not form:
-            print("Ошибка парсера: не найдена форма логина.")
+            logger.error("Не найдена форма логина")
             return False
 
         action_url = form['action']
@@ -77,13 +79,13 @@ def _perform_login(session: requests.Session, username: str, password: str) -> b
         # Проверка успеха, запрашивая снова страницу профиля
         check_response = session.get(f"{BASE_URL}/inside/profile")
         if 'kc-form-login' in check_response.text:
-            print("Ошибка авторизации: неверный логин или пароль.")
+            logger.error("Неверный логин или пароль")
             return False
-
+        logger.success(f"Пользователь {username} успешно авторизован")
         return True
 
     except requests.RequestException as e:
-        print(f"Сетевая ошибка при авторизации: {e}")
+        logger.error(f"Сетевая ошибка при авторизации: {e}")
         return False
 
 
@@ -107,10 +109,11 @@ def _extract_profile_id(session: requests.Session, full_name: str) -> Optional[s
             if full_name in link.get_text(strip=True) and 'href' in link.attrs:
                 match = re.search(r'/profile/(\d+)', link['href'])
                 if match:
+                    logger.success(f"Найден ID профиля пользователя {full_name}: {match.group(1)}")
                     return match.group(1)
         return None
     except requests.RequestException as e:
-        print(f"Сетевая ошибка при поиске ID на странице группы: {e}")
+        logger.error(f"Сетевая ошибка при поиске ID на странице группы: {e}")
         return None
 
 
@@ -138,10 +141,10 @@ def _extract_deadlines(session: requests.Session) -> Optional[List[Dict[str, str
                     'task': taskname_tag.get_text(strip=True),
                     'due_date': date_tag.get_text(strip=True)
                 })
-
+        logger.success(f"Парсер нашел {len(deadlines)} дедлайнов")
         return deadlines
     except requests.RequestException as e:
-        print(f"Сетевая ошибка при парсинге дедлайнов: {e}")
+        logger.error(f"Сетевая ошибка при парсинге дедлайнов: {e}")
         return None
 
 
@@ -154,12 +157,12 @@ def parse_lk_data(username: str, password: str) -> Optional[Tuple[List[Dict], Op
 
     # Авторизация
     if not _perform_login(session, username, password):
-        return None
-    print("Парсер: Успешная авторизация.")
+        return NotImplemented
 
     # Получаение страницы профиля один раз
     profile_response = session.get(f"{BASE_URL}/inside/profile")
     if not profile_response.ok:
+        logger.error(f"Не удалось получить страницу профиля: {username}")
         return [], None, None
     profile_soup = BeautifulSoup(profile_response.text, 'html.parser')
 
@@ -170,8 +173,9 @@ def parse_lk_data(username: str, password: str) -> Optional[Tuple[List[Dict], Op
 
     # Если парсинг дедлайнов не удался, то возвращается пустой список
     if deadlines is None:
+        logger.error(f"Не удалось парсить дедлайны пользователя {username}")
         deadlines = []
 
-    print(f"Парсер нашел: ID={profile_id}, ФИО='{full_name}', Дедлайнов={len(deadlines)}")
+    logger.success(f"Найдена публичная информация о пользователе {username}: ID={profile_id}, ФИО='{full_name}', Дедлайнов={len(deadlines)}")
 
     return deadlines, profile_id, full_name

@@ -1,12 +1,18 @@
-from datetime import datetime
-from typing import Union
+# TODO: Разбить на отдельные модули
 
-from aiogram import Router, F, types
+import asyncio
+from typing import Union
+from datetime import datetime
+
+from loguru import logger
+
+from aiogram import Bot, Router, F, types
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 from aiogram.exceptions import TelegramBadRequest
 
+from src.scheduler.tasks import update_user_deadlines_and_notify
 from src.database.queries import (
     add_user, set_user_credentials, update_user_deadlines, add_custom_deadline,
     delete_deadline_by_id, toggle_notifications, update_notification_days,
@@ -22,10 +28,8 @@ from src.parser.scraper import parse_lk_data, _get_current_semester_id
 from src.bot.keyboards import (
     get_main_menu_keyboard, get_cancel_keyboard, get_profile_keyboard,
     get_confirm_keyboard, get_deadlines_settings_keyboard,
-    get_notification_settings_keyboard, get_pagination_keyboard
+    get_notification_settings_keyboard, get_pagination_keyboard, get_update_button
 )
-
-import asyncio
 
 # Создание роутера (нужен для организации хэндлеров)
 # Хендлер - это функция, которая обрабатывает входящие сообщения и команды.
@@ -60,6 +64,7 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("Действие отменено.")
     await show_main_menu(message)
+    logger.info(f"Пользователь {message.from_user.id} отменил действие")
 
 
 @router.message(Command("help"))
@@ -76,6 +81,13 @@ async def cmd_help(message: types.Message):
         "/stop — Остановить работу бота и удалить свои данные"
     )
     await message.answer(help_text, parse_mode="HTML")
+    logger.info(f"Пользователь {message.from_user.id} получил справку")
+
+@router.message(Command("update"))
+async def cmd_update(message: types.Message, state: FSMContext, bot: Bot):
+    """Обработчик команды /update, обновляет дедлайны пользователя"""
+    await update_user_deadlines_and_notify(bot, message.from_user.id, force_notify=True)
+    logger.info(f"Пользователь {message.from_user.id} обновил дедлайны с помощью команды '/update'")
 
 
 # Хэндлер, который срабатывает на "/start"
@@ -94,12 +106,14 @@ async def cmd_start(message: types.Message, state: FSMContext):
             reply_markup=get_cancel_keyboard()
         )
         await state.set_state(Registration.waiting_for_login)
+        logger.info(f"Пользователь {message.from_user.id} регистрируется")
     else:
         await message.answer(
             "😊 С возвращением! Я уже знаю тебя!\n"
             "👇 Чтобы посмотреть дедлайны, используй соответствующие кнопки.",
             reply_markup=get_main_menu_keyboard()
         )
+        logger.info(f"Пользователь {message.from_user.id} смотрит меню")
 
 
 @router.message(Registration.waiting_for_login, F.text)
@@ -107,6 +121,7 @@ async def process_login(message: types.Message, state: FSMContext):
     await state.update_data(login=message.text)
     await message.answer("[2️⃣/2️⃣] Отлично! Теперь введи свой пароль:")
     await state.set_state(Registration.waiting_for_password)
+    logger.info(f"Пользователь {message.from_user.id} ввел логин")
 
 
 @router.message(Registration.waiting_for_password, F.text)
@@ -134,6 +149,7 @@ async def process_password(message: types.Message, state: FSMContext):
             reply_markup=get_cancel_keyboard()
         )
         await state.set_state(Registration.waiting_for_login)
+        logger.info(f"Пользователь {message.from_user.id} получил ошибку при входе")
         return
 
     new_parsed_deadlines, profile_id, full_name = parsed_data
@@ -155,6 +171,8 @@ async def process_password(message: types.Message, state: FSMContext):
         reply_markup=get_main_menu_keyboard()
     )
 
+    logger.info(f"Пользователь {message.from_user.id} успешно авторизовался")
+
     if new_parsed_deadlines:
         await update_user_deadlines(message.from_user.id, new_parsed_deadlines)
         deadlines_text = "\n\n".join(
@@ -163,8 +181,10 @@ async def process_password(message: types.Message, state: FSMContext):
              f"🗓️ <b>Срок сдачи:</b> {d['due_date']}" for d in new_parsed_deadlines]
         )
         await message.answer(f"Вот, что я нашёл:\n\n{deadlines_text}", parse_mode="HTML")
+        logger.info(f"Для пользователя {message.from_user.id} найдено {len(new_parsed_deadlines)} активных дедлайнов")
     else:
         await message.answer("На данный момент не найдено активных дедлайнов.")
+        logger.info(f"Для пользователя {message.from_user.id} не найдено активных дедлайнов")
 
 # -------------------------------------------------------------------------------------------
 # Основные команды меню
@@ -199,8 +219,11 @@ async def show_deadlines(message: types.Message):
     if not deadlines:
         await message.answer(
             "🕳 У вас пока нет предстоящих дедлайнов в базе.\n"
-            "⏰ Обновление происходит автоматически <u>раз в час</u>.",
-            parse_mode="HTML")
+            "⏰ Обновление происходит автоматически <u>раз в час</u>."
+            "🧲 Вы можете запросить обновление дедлайнов с помощью кнопки 'Обновить' или набрав команду '/update'.",
+            parse_mode="HTML",
+            reply_markup=get_update_button(message.from_user.id),
+        )
         return
 
     total_pages = (len(deadlines) + PAGE_SIZE - 1) // PAGE_SIZE
@@ -211,6 +234,8 @@ async def show_deadlines(message: types.Message):
         reply_markup=get_pagination_keyboard(current_page=0, total_pages=total_pages),
         parse_mode="HTML"
     )
+
+    logger.info(f"Пользователь {message.from_user.id} посмотрел все дедлайны")
 
 
 # Кнопка "Мой профиль"
@@ -247,6 +272,8 @@ async def show_profile(message: types.Message):
         parse_mode="HTML"
     )
 
+    logger.info(f"Пользователь {message.from_user.id} посмотрел свой профиль")
+
 
 # Команда "/stop"
 @router.message(Command("stop"))
@@ -269,6 +296,7 @@ async def cmd_stop(message: types.Message):
 async def settings_notifications_menu(message: types.Message):
     user = await get_user_by_telegram_id(message.from_user.id)
     if not user:
+        logger.warning(f"Пользователь {message.from_user.id} не найден в базе данных при попытке настроить уведомления")
         await message.answer("⛔ Не удалось найти ваш профиль. Попробуйте /start.")
         return
 
@@ -276,6 +304,8 @@ async def settings_notifications_menu(message: types.Message):
         "🔔 Здесь вы можете настроить уведомления:",
         reply_markup=get_notification_settings_keyboard(user)
     )
+
+    logger.info(f"Пользователь {message.from_user.id} посмотрел настройки уведомлений")
 
 
 async def update_notification_settings_menu(callback: CallbackQuery):
@@ -308,9 +338,12 @@ async def settings_deadlines_menu(message: types.Message):
         reply_markup=get_deadlines_settings_keyboard(
             deadlines,
             current_page=0,
-            page_size=PAGE_SIZE
+            page_size=PAGE_SIZE,
+            user_id=message.from_user.id
         )
     )
+
+    logger.info(f"Пользователь {message.from_user.id} посмотрел настройки дедлайнов")
 
 
 # -------------------------------------------------------------------------------------------
@@ -321,6 +354,10 @@ async def deadlines_page_callback(callback: CallbackQuery):
     """
     Хэндлер, обрабатывающий переключение страниц в списке дедлайнов.
     """
+    if not callback.data or not callback.message:
+        logger.error("Не удалось обработать callback-запрос для обработки страницы с callback_id={callback.id}")
+        return
+
     page = int(callback.data.split("_")[1])
 
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
@@ -339,12 +376,26 @@ async def deadlines_page_callback(callback: CallbackQuery):
     )
     await callback.answer()
 
+@router.callback_query(F.data.startswith("update_"))
+async def update_deadlines_callback(callback: CallbackQuery, bot: Bot):
+    """
+    Хэндлер, обрабатывающий кнопку обновления дедлайнов.
+    """
+    if not callback.data or not callback.message:
+        logger.error("Не удалось обработать callback-запрос для обработки кнопки обновления дедлайнов")
+        return
+    user_id = int(callback.data.split("_")[1])
+    await update_user_deadlines_and_notify(bot, user_id, force_notify=True)
+    await callback.answer()
 
 @router.callback_query(F.data.startswith("settings_page_"))
 async def settings_page_callback(callback: CallbackQuery):
     """
     Хэндлер, обрабатывающий переключение страниц в меню настройки дедлайнов.
     """
+    if not callback.data or not callback.message:
+        logger.error("Не удалось обработать callback-запрос для обработки переключения страниц в меню настройки дедлайнов")
+        return
     page = int(callback.data.split("_")[2])
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
 
@@ -352,7 +403,8 @@ async def settings_page_callback(callback: CallbackQuery):
         reply_markup=get_deadlines_settings_keyboard(
             deadlines,
             current_page=page,
-            page_size=PAGE_SIZE
+            page_size=PAGE_SIZE,
+            user_id=callback.from_user.id
         )
     )
     await callback.answer()
@@ -379,6 +431,7 @@ async def on_delete_data(callback: CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
+    logger.info(f"Пользователь {callback.from_user.id} пытается удалить все личные данные")
 
 
 @router.callback_query(F.data == "confirm_delete")
@@ -397,7 +450,9 @@ async def on_confirm_delete(callback: CallbackQuery):
             "👋 Вы были отписаны.",
             reply_markup=ReplyKeyboardRemove()
         )
+        logger.info(f"Пользователь {callback.from_user.id} удалил все личные данные")
     else:
+        logger.warning(f"Пользователь {callback.from_user.id} получил ошибку при попытке удалить все личные данные")
         await callback.message.edit_text("⛔ Произошла ошибка при удалении. Попробуйте еще раз позже.", reply_markup=None)
     await callback.answer()
 
@@ -407,6 +462,7 @@ async def on_cancel_delete(callback: CallbackQuery):
     """Хэндлер, обрабатывающий отмену удаления."""
     await callback.message.edit_text("❕ Удаление отменено.", reply_markup=None)
     await callback.answer()
+    logger.info(f"Пользователь {callback.from_user.id} отменил удаление своих данных")
 
 
 @router.callback_query(F.data.startswith("del_deadline_"))
@@ -439,6 +495,7 @@ async def delete_deadline_confirm_callback(callback: CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
+    logger.info(f"Пользователь {callback.from_user.id} пытается удалить дедлайн")
 
 
 @router.callback_query(F.data.startswith("confirm_del_deadline_"))
@@ -456,10 +513,12 @@ async def confirm_delete_deadline_callback(callback: CallbackQuery):
         reply_markup=get_deadlines_settings_keyboard(
             deadlines,
             current_page=0, # Возврат на первую страницу
-            page_size=PAGE_SIZE
+            page_size=PAGE_SIZE,
+            user_id=callback.from_user.id
         )
     )
     await callback.answer(text="Удалено!", show_alert=False)
+    logger.info(f"Пользователь {callback.from_user.id} удалил дедлайн")
 
 
 @router.callback_query(F.data == "cancel_del_deadline")
@@ -474,10 +533,12 @@ async def cancel_delete_deadline_callback(callback: CallbackQuery):
         reply_markup=get_deadlines_settings_keyboard(
             deadlines,
             current_page=0, # Возврат на первую страницу
-            page_size=PAGE_SIZE
+            page_size=PAGE_SIZE,
+            user_id=callback.from_user.id
         )
     )
     await callback.answer()
+    logger.info(f"Пользователь {callback.from_user.id} отменил удаление дедлайнов")
 
 
 @router.callback_query(F.data == "toggle_notifications")
@@ -508,6 +569,7 @@ async def on_delete_all_custom(callback: CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
+    logger.info("Пользователь пытается удалить все личные дедлайны")
 
 
 @router.callback_query(F.data == "confirm_delete_all_custom")
@@ -520,6 +582,7 @@ async def on_confirm_delete_all_custom(callback: CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
+    logger.info("Пользователь удалил все личные дедлайны")
 
 
 @router.callback_query(F.data == "cancel_delete_all_custom")
@@ -529,6 +592,7 @@ async def on_cancel_delete_all_custom(callback: CallbackQuery):
     # Показ профиля заново, чтобы пользователь не потерялся
     await show_profile(callback.message)
     await callback.answer()
+    logger.info("Пользователь отменил удаление всех личных дедлайнов")
 
 # -------------------------------------------------------------------------------------------
 # FSM для настройки интервала уведомлений
@@ -544,6 +608,7 @@ async def set_interval_start(callback: CallbackQuery, state: FSMContext):
     )
     await state.set_state(SetNotificationInterval.waiting_for_hours)
     await callback.answer()
+    logger.info("Пользователь настраивает интервал уведомлений")
 
 
 @router.message(SetNotificationInterval.waiting_for_hours, F.text)
@@ -566,6 +631,8 @@ async def set_interval_hours(message: types.Message, state: FSMContext):
             "✅ Настройки сохранены!",
             reply_markup=get_notification_settings_keyboard(user)
         )
+    
+    logger.info("Пользователь настраивает интервал уведомлений")
 
 # -------------------------------------------------------------------------------------------
 # FSM для добавления нового дедлайна
@@ -633,3 +700,5 @@ async def add_deadline_date(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("✅ Новый дедлайн успешно добавлен!")
     await show_main_menu(message)
+
+    logger.info(f"Пользователь {message.from_user.id} добавил новый дедлайн")

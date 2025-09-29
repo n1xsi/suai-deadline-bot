@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 
+from loguru import logger
 from sqlalchemy import select, update, delete, func
 
 from src.database.engine import async_session_factory
@@ -16,11 +17,13 @@ async def add_user(telegram_id: int, username: str | None = None):
     async with async_session_factory() as session:
         result = await session.execute(select(User).where(User.telegram_id == telegram_id))
         if result.scalars().first():
+            logger.warning(f"Пользователь с telegram_id={telegram_id} уже существует")
             return False
 
         new_user = User(telegram_id=telegram_id, username=username)
         session.add(new_user)
         await session.commit()
+        logger.success(f"Пользователь с telegram_id={telegram_id} добавлен")
         return True
 
 
@@ -48,6 +51,7 @@ async def set_user_credentials(
         )
         await session.execute(query)
         await session.commit()
+        logger.success(f"Пользователь с telegram_id={telegram_id} обновлен")
 
 
 async def get_all_users(only_with_notifications: bool = False):
@@ -60,6 +64,7 @@ async def get_all_users(only_with_notifications: bool = False):
         if only_with_notifications:
             query = query.where(User.notifications_enabled == True)
         result = await session.execute(query)
+        logger.success("Пользователи получены")
         return result.scalars().all()
 
 
@@ -67,6 +72,7 @@ async def get_user_by_telegram_id(telegram_id: int):
     """Возвращает пользователя по его telegram_id."""
     async with async_session_factory() as session:
         result = await session.execute(select(User).where(User.telegram_id == telegram_id))
+        logger.success(f"Пользователь с telegram_id={telegram_id} получен")
         return result.scalars().first()
 
 
@@ -75,6 +81,7 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
     "Умно" синхронизирует дедлайны из парсера с базой данных, не трогая дедлайны, добавленные вручную.
     Возвращает список словарей с данными о вновь добавленных дедлайнах.
     """
+    # TODO: Разбить на несколько функций
     async with async_session_factory() as session:
         user = await get_user_by_telegram_id(telegram_id)
         if not user:
@@ -136,6 +143,7 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
             session.add_all(objects_to_add_in_db)
 
         await session.commit()
+        logger.success(f'Добавлено {len(objects_to_add_in_db)} дедлайнов') 
         return newly_added_deadlines_data
 
 
@@ -153,6 +161,7 @@ async def get_users_with_upcoming_deadlines(days: int):
             .where(func.date(Deadline.due_date) == target_date)
         )
         result = await session.execute(query)
+        logger.success(f'Пользователи с дедлайнами наступающими в {days} дней: {len(result.all())}')
         return result.all()  # Возврат пары (User, Deadline)
 
 
@@ -161,6 +170,7 @@ async def get_user_stats(telegram_id: int) -> dict:
     async with async_session_factory() as session:
         user = await get_user_by_telegram_id(telegram_id)
         if not user:
+            logger.error(f'Не удалось получить статистику пользователя с telegram_id={telegram_id}, пользователя не существует')
             return {}
 
         # Подсчёт всех дедлайнов
@@ -177,14 +187,19 @@ async def get_user_stats(telegram_id: int) -> dict:
             Deadline.is_custom == True
         )
         custom_active_count = await session.execute(custom_active_query)
+        
+        active_count = all_active_count.scalar_one_or_none() or 0
+        custom_count = custom_active_count.scalar_one_or_none() or 0
+
+        logger.success(f'Статистика пользователя {telegram_id}: {active_count} активных дедлайнов, {custom_count} личных')
 
         return {
-            "active_deadlines": all_active_count.scalar_one_or_none() or 0,
-            "custom_deadlines": custom_active_count.scalar_one_or_none() or 0
+            "active_deadlines": active_count,
+            "custom_deadlines": custom_count
         }
 
 
-async def delete_user_data(telegram_id: int):
+async def delete_user_data(telegram_id: int) -> bool:
     """Полностью удаляет пользователя и все его данные из БД."""
     async with async_session_factory() as session:
         user_query = select(User).where(User.telegram_id == telegram_id)
@@ -197,15 +212,18 @@ async def delete_user_data(telegram_id: int):
             # Удаление пользователя
             await session.execute(delete(User).where(User.telegram_id == telegram_id))
             await session.commit()
+            logger.success(f'Пользователь с telegram_id={telegram_id} удалён')
             return True
+    logger.error(f'Не удалось удалить пользователя с telegram_id={telegram_id}')
     return False
 
 
-async def get_user_deadlines_from_db(telegram_id: int):
+async def get_user_deadlines_from_db(telegram_id: int) -> list[Deadline]:
     """Получает все актуальные дедлайны пользователя из БД."""
     async with async_session_factory() as session:
         user = await get_user_by_telegram_id(telegram_id)
         if not user:
+            logger.error(f'Не удалось получить дедлайны пользователя с telegram_id={telegram_id}, пользователя не существует')
             return []
 
         # Поиск дедлайнов, которые ещё не прошли
@@ -215,7 +233,9 @@ async def get_user_deadlines_from_db(telegram_id: int):
             .order_by(Deadline.due_date.asc())
         )
         result = await session.execute(query)
-        return result.scalars().all()
+        deadlines = result.scalars().all()
+        logger.success(f'Пользователь с telegram_id={telegram_id} имеет {len(deadlines)} дедлайнов')
+        return list(deadlines)
 
 
 async def add_custom_deadline(telegram_id: int, course: str, task: str, due_date: datetime):
@@ -223,6 +243,7 @@ async def add_custom_deadline(telegram_id: int, course: str, task: str, due_date
     async with async_session_factory() as session:
         user = await get_user_by_telegram_id(telegram_id)
         if not user:
+            logger.error(f'Не удалось добавить личный дедлайн для пользователя с telegram_id={telegram_id}, пользователя не существует')
             return None
 
         new_deadline = Deadline(
@@ -234,6 +255,7 @@ async def add_custom_deadline(telegram_id: int, course: str, task: str, due_date
         )
         session.add(new_deadline)
         await session.commit()
+        logger.success(f'Добавлен личный дедлайн для пользователя с telegram_id={telegram_id}')
         return new_deadline
 
 
@@ -242,6 +264,7 @@ async def get_deadline_by_id(deadline_id: int):
     async with async_session_factory() as session:
         query = select(Deadline).where(Deadline.id == deadline_id)
         result = await session.execute(query)
+        logger.success(f"Получен дедлайн с id={deadline_id}")
         return result.scalars().first()
 
 
@@ -251,6 +274,7 @@ async def delete_deadline_by_id(deadline_id: int):
         query = delete(Deadline).where(Deadline.id == deadline_id)
         await session.execute(query)
         await session.commit()
+        logger.success(f'Дедлайн с id={deadline_id} удалён')
 
 
 async def toggle_notifications(telegram_id: int) -> bool:
@@ -259,11 +283,13 @@ async def toggle_notifications(telegram_id: int) -> bool:
         user_result = await session.execute(select(User).where(User.telegram_id == telegram_id))
         user = user_result.scalars().first()
         if not user:
+            logger.error(f"Не удалось переключить уведомления для пользователя с telegram_id={telegram_id}, пользователь не существует")
             return False
 
         user.notifications_enabled = not user.notifications_enabled
         new_state = user.notifications_enabled
         await session.commit()
+        logger.success(f"Пользователь с telegram_id={telegram_id} переключил уведомления на {new_state}")
         return new_state
 
 
@@ -273,6 +299,7 @@ async def update_notification_days(telegram_id: int, day: int) -> str:
         user_result = await session.execute(select(User).where(User.telegram_id == telegram_id))
         user = user_result.scalars().first()
         if not user:
+            logger.error(f"Не удалось обновить уведомления для пользователя с telegram_id={telegram_id}, пользователь не существует")
             return ""
 
         if user.notification_days:
@@ -289,6 +316,7 @@ async def update_notification_days(telegram_id: int, day: int) -> str:
         user.notification_days = ",".join(map(str, new_days_list))
         new_days_str = user.notification_days
         await session.commit()
+        logger.success(f"Пользователь с telegram_id={telegram_id} обновил уведомления на {new_days_str}")
         return new_days_str
 
 
@@ -302,6 +330,7 @@ async def set_notification_interval(telegram_id: int, hours: int):
         )
         await session.execute(query)
         await session.commit()
+        logger.success(f"Пользователь с telegram_id={telegram_id} обновил интервал уведомлений на {hours} часов")
 
 
 async def delete_all_custom_deadlines(telegram_id: int):
@@ -309,6 +338,7 @@ async def delete_all_custom_deadlines(telegram_id: int):
     async with async_session_factory() as session:
         user = await get_user_by_telegram_id(telegram_id)
         if not user:
+            logger.error(f"Не удалось удалить все личные дедлайны пользователя с telegram_id={telegram_id}, пользователь не существует")
             return False
 
         query = delete(Deadline).where(
@@ -317,4 +347,5 @@ async def delete_all_custom_deadlines(telegram_id: int):
         )
         await session.execute(query)
         await session.commit()
+        logger.success(f'Все личные дедлайны удалены пользователю с telegram_id={telegram_id}')
         return True

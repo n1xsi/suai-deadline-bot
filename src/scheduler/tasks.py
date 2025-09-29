@@ -1,74 +1,95 @@
+import asyncio
 from datetime import datetime
 
 from aiogram import Bot
-import asyncio
+from loguru import logger
 
 from src.database.queries import (
-    get_all_users, get_user_deadlines_from_db, update_user_deadlines
+    get_all_users, get_user_by_telegram_id, get_user_deadlines_from_db, update_user_deadlines
 )
 from src.parser.scraper import parse_lk_data
 from src.utils.crypto import decrypt_data
 
 
+async def update_user_deadlines_and_notify(bot: Bot, user_id: int, force_notify: bool = False):
+    """
+    Задача для обновления дедлайнов пользователя.
+    """
+    logger.info(f"Запуск задачи обновления дедлайнов пользователя {user_id}...")
+
+    user = await get_user_by_telegram_id(user_id)
+    if not user:
+        logger.warning(f"Не удалось обновить дедлайны для пользователя {user_id} (пользователь не существует)")
+        return
+
+    # Проверка, что у пользователя есть сохранённые учётные данные
+    if not user.encrypted_login_lk or not user.encrypted_password_lk:
+        logger.warning(f"Не удалось обновить дедлайны для пользователя {user.telegram_id} (нет сохранённых данных пользователя)")
+        return
+
+    # Расшифровка данных
+    login = decrypt_data(user.encrypted_login_lk)
+    password = decrypt_data(user.encrypted_password_lk)
+
+    # Запуск парсера
+    loop = asyncio.get_event_loop()
+    parsed_data = await loop.run_in_executor(None, parse_lk_data, login, password)
+    if parsed_data:
+        deadlines_from_parser, _, _ = parsed_data
+    else:
+        logger.error(f"Не удалось обновить дедлайны для пользователя {user.telegram_id} (ошибка парсера)")
+        return
+
+    newly_added = await update_user_deadlines(user.telegram_id, deadlines_from_parser)
+
+    if newly_added:
+        # Если список не пустой, значит появились новые дедлайны
+        logger.success(f"Найдено {len(newly_added)} новых дедлайнов для пользователя {user.telegram_id}")
+
+        new_deadlines_text = "✨ <b>Обнаружены новые дедлайны!</b>\n\n"
+        for d in newly_added:
+            new_deadlines_text += (
+                f"📚 <b>{d['course_name']}</b>\n"
+                f"📝 {d['task_name']}\n"
+                f"🗓️ Срок сдачи: {d['due_date'].strftime('%d.%m.%Y')}\n\n"
+            )
+
+        try:
+            await bot.send_message(
+                chat_id=user.telegram_id,
+                text=new_deadlines_text,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Не удалось отправить уведомление о новых дедлайнах {user.telegram_id}. Ошибка: {e}")
+    else:
+        logger.info(f"Новых дедлайнов для пользователя {user.telegram_id} не найдено")
+        if force_notify:
+            await bot.send_message(
+                chat_id=user.telegram_id,
+                text="✅ Новых дедлайнов не найдено, всё по-прежнему!",
+                parse_mode="HTML"
+            )
+    
+
 async def update_all_deadlines(bot: Bot):
     """
     Задача для полного обновления дедлайнов и уведомления о новых.
     """
-    print("SCHEDULER: Запуск задачи обновления дедлайнов...")
+    logger.info("Запуск задачи обновления дедлайнов всех пользователей...")
     users = await get_all_users()
     for user in users:
-        # Проверка, что у пользователя есть сохранённые учётные данные
-        if not user.encrypted_login_lk or not user.encrypted_password_lk:
-            continue
-
-        # Расшифровка данных
-        login = decrypt_data(user.encrypted_login_lk)
-        password = decrypt_data(user.encrypted_password_lk)
-
-        # Запуск парсера
-        loop = asyncio.get_event_loop()
-        parsed_data = await loop.run_in_executor(None, parse_lk_data, login, password)
-        if parsed_data:
-            deadlines_from_parser, _, _ = parsed_data
-        else:
-            print(f"SCHEDULER: Не удалось обновить дедлайны для {user.telegram_id} (ошибка парсера).")
-            continue
-
-        newly_added = await update_user_deadlines(user.telegram_id, deadlines_from_parser)
-
-        if newly_added:
-            # Если список не пустой, значит появились новые дедлайны
-            print(f"SCHEDULER: Найдено {len(newly_added)} новых дедлайнов для пользователя {user.telegram_id}.")
-
-            new_deadlines_text = "✨ <b>Обнаружены новые дедлайны!</b>\n\n"
-            for d in newly_added:
-                new_deadlines_text += (
-                    f"📚 <b>{d['course_name']}</b>\n"
-                    f"📝 {d['task_name']}\n"
-                    f"🗓️ Срок сдачи: {d['due_date'].strftime('%d.%m.%Y')}\n\n"
-                )
-
-            try:
-                await bot.send_message(
-                    chat_id=user.telegram_id,
-                    text=new_deadlines_text,
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                print(f"SCHEDULER: Не удалось отправить уведомление о новых дедлайнах {user.telegram_id}. Ошибка: {e}")
-        else:
-            print(f"SCHEDULER: Новых дедлайнов для пользователя {user.telegram_id} не найдено.")
-
+        await update_user_deadlines_and_notify(bot, user.telegram_id)
         await asyncio.sleep(5)
-
-    print("SCHEDULER: Задача обновления дедлайнов завершена.")
+    
+    logger.success(f"Задача обновления дедлайнов для {len(users)} пользователей завершена")
 
 
 async def send_deadline_notifications(bot: Bot):
     """
     Задача для отправки уведомлений о дедлайнах с учётом настроек пользователя.
     """
-    print("SCHEDULER: Запуск задачи отправки уведомлений...")
+    logger.info("Запуск задачи отправки уведомлений о дедлайнах")
     current_hour = datetime.now().hour
 
     # Поиск только тех пользователей, кто хочет получать уведомления
@@ -95,11 +116,11 @@ async def send_deadline_notifications(bot: Bot):
                     )
                     try:
                         await bot.send_message(chat_id=user.telegram_id, text=text, parse_mode="HTML")
-                        print(f"SCHEDULER: Отправлено ЕЖЕДНЕВНОЕ уведомление пользователю {user.telegram_id}.")
+                        logger.success(f"Отправлено ЕЖЕДНЕВНОЕ уведомление пользователю {user.telegram_id}.")
                         notification_sent_this_run = True
                         break  # Отправка только одного ежедневного уведомления за раз
                     except Exception as e:
-                        print(f"SCHEDULER: Не удалось отправить уведомление {user.telegram_id}. Ошибка: {e}")
+                        logger.error(f"Не удалось отправить уведомление {user.telegram_id}. Ошибка: {e}")
 
         # Логика для частых (часовых) уведомлений
         interval = user.notification_interval_hours
@@ -109,9 +130,9 @@ async def send_deadline_notifications(bot: Bot):
                 deadlines_text += f"▪️ {d.course_name}: {d.task_name} (до {d.due_date.strftime('%d.%m')})\n"
             try:
                 await bot.send_message(chat_id=user.telegram_id, text=deadlines_text, parse_mode="HTML")
-                print(f"SCHEDULER: Отправлено ЧАСТОЕ уведомление пользователю {user.telegram_id}.")
+                logger.success(f"Отправлено ЧАСТОЕ уведомление пользователю {user.telegram_id}")
             except Exception as e:
-                print(f"SCHEDULER: Не удалось отправить уведомление {user.telegram_id}. Ошибка: {e}")
+                logger.error(f"Не удалось отправить уведомление {user.telegram_id}. Ошибка: {e}")
 
         await asyncio.sleep(1)
-    print("SCHEDULER: Задача отправки уведомлений завершена.")
+    logger.success("Задача отправки уведомлений завершена")

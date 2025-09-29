@@ -1,6 +1,7 @@
-from src.config import BOT_TOKEN
-from src.bot.handlers import router as main_router
+from src.config import BOT_TOKEN, ADMIN_ID
 from src.database.engine import create_tables
+from src.bot.handlers import router as main_router
+from src.utils.logging import init_logger
 from src.scheduler.tasks import update_all_deadlines, send_deadline_notifications
 
 from aiogram import Bot, Dispatcher
@@ -9,7 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import asyncio
-import logging
+from loguru import logger
 
 
 async def set_main_menu_commands(bot: Bot):
@@ -31,14 +32,13 @@ async def main():
     """
     Основная функция, которая запускает бота
     """
-    # Логирование, показывает информацию о работе бота в консоли
-    logging.basicConfig(level=logging.INFO)
 
     # Создание таблиц в БД перед запуском бота (если их ещё нет)
     await create_tables()
 
     # Инициализация бота с токеном
     bot = Bot(token=BOT_TOKEN)
+    init_logger(bot, ADMIN_ID)
 
     # Инициализция команд для бота
     await set_main_menu_commands(bot)
@@ -75,4 +75,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logging.info("Бот остановлен")
+        logger.info("Бот остановлен")
