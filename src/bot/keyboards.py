@@ -58,7 +58,7 @@ def get_cancel_keyboard():
     return keyboard
 
 
-def get_deadlines_settings_keyboard(deadlines: list, current_page: int, page_size: int):
+def get_deadlines_settings_keyboard(deadlines: list, current_page: int, page_size: int, user_id: int):
     """
     Создаёт пагинированную клавиатуру для удаления дедлайнов.
     Каждый дедлайн - это кнопка для его удаления.
@@ -82,6 +82,8 @@ def get_deadlines_settings_keyboard(deadlines: list, current_page: int, page_siz
     # Кнопка для добавления нового дедлайна (в отдельном ряду)
     builder.row(InlineKeyboardButton(text="➕ Добавить собственный дедлайн", callback_data="add_deadline"))
 
+    builder.row(InlineKeyboardButton(text="📨 Синхронизировать дедлайны ЛК", callback_data=f"update_{user_id}"))
+
     pagination_buttons = []
     if current_page > 0:
         pagination_buttons.append(
@@ -101,7 +103,7 @@ def get_deadlines_settings_keyboard(deadlines: list, current_page: int, page_siz
         builder.row(*pagination_buttons)
 
     # Выстраивание кнопок: по одной на дедлайн, затем действия и ряд пагинации
-    builder.adjust(*([1] * len(page_deadlines)), 1, len(pagination_buttons))
+    builder.adjust(*([1] * len(page_deadlines)), 1, 1, len(pagination_buttons))
     return builder.as_markup()
 
 
@@ -151,4 +153,13 @@ def get_pagination_keyboard(current_page: int, total_pages: int):
 
     # Расположение кнопок в один ряд
     builder.adjust(3)
+    return builder.as_markup()
+
+
+def get_update_button(user_id: int):
+    """
+    Создаёт кнопку для обновления дедлайнов.
+    """
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Обновить", callback_data=f"update_{user_id}")
     return builder.as_markup()
