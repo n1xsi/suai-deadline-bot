@@ -19,10 +19,11 @@ async def set_main_menu_commands(bot: Bot):
     """
     main_menu_commands = [
         BotCommand(command="/start", description="Запустить/перезапустить бота"),
-        BotCommand(command="/add", description="Добавить дедлайн вручную"),
-        BotCommand(command="/status", description="Показать актуальные дедлайны"),
         BotCommand(command="/help", description="Справка по работе бота"),
-        BotCommand(command="/cancel", description="Отменить текущее действие"),
+        BotCommand(command="/status", description="Показать актуальные дедлайны"),
+        BotCommand(command="/update", description="Синхронизировать дедлайны с ЛК"),
+        BotCommand(command="/add", description="Добавить дедлайн вручную"),
+        BotCommand(command="/cancel%", description="Отменить текущее действие"),
         BotCommand(command="/stop", description="❌ Остановить работу бота и удалить свои данные ❌")
     ]
     await bot.set_my_commands(main_menu_commands)
