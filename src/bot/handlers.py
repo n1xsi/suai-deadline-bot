@@ -1,8 +1,8 @@
 # TODO: Разбить на отдельные модули
 
-import asyncio
 from typing import Union
 from datetime import datetime
+import asyncio
 
 from loguru import logger
 
@@ -12,7 +12,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 from aiogram.exceptions import TelegramBadRequest
 
-from src.scheduler.tasks import update_user_deadlines_and_notify
 from src.database.queries import (
     add_user, set_user_credentials, update_user_deadlines, add_custom_deadline,
     delete_deadline_by_id, toggle_notifications, update_notification_days,
@@ -22,14 +21,12 @@ from src.database.queries import (
 )
 from src.bot.states import Registration, AddDeadline, SetNotificationInterval
 from src.bot.filters import InStateFilter
+from src.bot.keyboards import *
 
 from src.parser.scraper import parse_lk_data, _get_current_semester_id
 
-from src.bot.keyboards import (
-    get_main_menu_keyboard, get_cancel_keyboard, get_profile_keyboard,
-    get_confirm_keyboard, get_deadlines_settings_keyboard,
-    get_notification_settings_keyboard, get_pagination_keyboard, get_update_button
-)
+from src.scheduler.tasks import update_user_deadlines_and_notify
+
 
 # Создание роутера (нужен для организации хэндлеров)
 # Хендлер - это функция, которая обрабатывает входящие сообщения и команды.

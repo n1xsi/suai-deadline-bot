@@ -1,9 +1,9 @@
+from loguru import logger
+from aiogram import Bot
+
 import sys
 import asyncio
 import logging
-
-from loguru import logger
-from aiogram import Bot
 
 
 class InterceptHandler(logging.Handler):
@@ -30,7 +30,7 @@ class TelegramSink:
         record = message.record
         if record["level"].name in ("ERROR", "CRITICAL"):
             text = (
-                f"🚨 {record['level'].name}\n"
+                f"❗ {record['level'].name}\n"
                 f"File: {record['file'].name}:{record['line']}\n"
                 f"Function: {record['function']}\n"
                 f"Message: {record['message']}"

@@ -9,8 +9,8 @@ from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-import asyncio
 from loguru import logger
+import asyncio
 
 
 async def set_main_menu_commands(bot: Bot):
