@@ -79,10 +79,9 @@ def get_deadlines_settings_keyboard(deadlines: list, current_page: int, page_siz
             callback_data=f"del_deadline_{deadline.id}"
         )
 
-    # Кнопка для добавления нового дедлайна (в отдельном ряду)
+    # Дополнительные кнопки действий в отдельных рядах
     builder.row(InlineKeyboardButton(text="➕ Добавить собственный дедлайн", callback_data="add_deadline"))
-
-    builder.row(InlineKeyboardButton(text="📨 Синхронизировать дедлайны ЛК", callback_data=f"update_{user_id}"))
+    builder.row(InlineKeyboardButton(text="📨 Синхронизировать дедлайны с ЛК", callback_data=f"update_{user_id}"))
 
     pagination_buttons = []
     if current_page > 0:
@@ -98,7 +97,7 @@ def get_deadlines_settings_keyboard(deadlines: list, current_page: int, page_siz
             InlineKeyboardButton(text="Вперед ➡️", callback_data=f"settings_page_{current_page + 1}")
         )
 
-    # Если кнопок пагинации больше нуля, добавляем их в ряд
+    # Если кнопок пагинации больше нуля, то они добавляются в ряд
     if pagination_buttons:
         builder.row(*pagination_buttons)
 
