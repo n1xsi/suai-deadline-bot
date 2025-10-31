@@ -17,7 +17,7 @@
 
 Опробовать: [@suai_deadline_bot](https://t.me/suai_deadline_bot)
 
-## ✨ Функционал бота
+## ✨ Функционал бота (скоро обновится)
 
 <div align="center">
   
