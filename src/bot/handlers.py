@@ -525,12 +525,12 @@ async def confirm_delete_deadline_callback(callback: CallbackQuery):
     Хэндлер, который срабатывает при подтверждении и окончательно удаляет дедлайн.
     """
     deadline_id = int(callback.data.split("_")[3])
-    await delete_deadline_by_id(deadline_id)
+    await move_deadline_to_trash(deadline_id)
 
     # Обновление исходного меню настроек, чтобы показать, что дедлайн исчез
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
     await callback.message.edit_text(
-        "🚮 Дедлайн удален. Вот обновленный список:",
+        "🚮 Дедлайн перемещён в корзину. Вот обновленный список:",
         reply_markup=get_deadlines_settings_keyboard(
             deadlines,
             current_page=0,  # Возврат на первую страницу
@@ -616,8 +616,82 @@ async def on_cancel_delete_all_custom(callback: CallbackQuery):
     logger.info("Пользователь отменил удаление всех личных дедлайнов")
 
 # -------------------------------------------------------------------------------------------
-# FSM для настройки интервала уведомлений
+# Управление корзиной
 
+async def show_trash_bin(callback: CallbackQuery, page: int = 0):
+    """Вспомогательная функция для отображения содержимого корзины."""
+    trashed_deadlines = await get_trashed_deadlines_from_db(callback.from_user.id)
+    if not trashed_deadlines:
+        text = "🗑️ Корзина пуста."
+    else:
+        text = "🗑️ Здесь находятся удаленные вами дедлайны. Нажмите на любой, чтобы восстановить его."
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_trash_bin_keyboard(trashed_deadlines, current_page=page, page_size=PAGE_SIZE)
+    )
+
+
+@router.callback_query(F.data == "open_trash_bin")
+async def open_trash_bin_callback(callback: CallbackQuery):
+    await show_trash_bin(callback)
+    await callback.answer()
+    logger.info(f"Пользователь {callback.from_user.id} открыл корзину")
+
+
+@router.callback_query(F.data.startswith("trash_page_"))
+async def trash_page_callback(callback: CallbackQuery):
+    page = int(callback.data.split("_")[2])
+    await show_trash_bin(callback, page=page)
+    await callback.answer()
+    logger.info(f"Пользователь {callback.from_user.id} переключил страницу корзины на {page}")
+
+
+@router.callback_query(F.data.startswith("restore_"))
+async def restore_deadline_callback(callback: CallbackQuery):
+    deadline_id = int(callback.data.split("_")[1])
+    await restore_deadline_from_trash(deadline_id)
+    await show_trash_bin(callback)  # Обновление вида корзины
+    await callback.answer("✅ Дедлайн восстановлен!", show_alert=True)
+    logger.info(f"Пользователь {callback.from_user.id} восстановил дедлайн из корзины")
+
+
+@router.callback_query(F.data == "empty_trash")
+async def empty_trash_confirm_callback(callback: CallbackQuery):
+    await callback.message.edit_text(
+        "Вы уверены, что хотите <b>перманентно</b> удалить все дедлайны из корзины?",
+        reply_markup=get_confirm_keyboard(
+            confirm_text="Да, очистить",
+            confirm_callback="confirm_empty_trash",
+            cancel_text="Нет, отмена",
+            cancel_callback="open_trash_bin"  # Возврат в корзину
+        )
+    )
+    await callback.answer()
+    logger.info(f"Пользователь {callback.from_user.id} пытается очистить корзину")
+
+
+@router.callback_query(F.data == "confirm_empty_trash")
+async def empty_trash_confirmed_callback(callback: CallbackQuery):
+    await empty_trash_for_user(callback.from_user.id)
+    await show_trash_bin(callback)  # Показываем теперь уже пустую корзину
+    await callback.answer("💥 Корзина очищена!", show_alert=True)
+    logger.info(f"Пользователь {callback.from_user.id} очистил корзину")
+
+
+@router.callback_query(F.data == "back_to_settings")
+async def back_to_settings_callback(callback: CallbackQuery):
+    # Функция "симулирует" нажатие на кнопку "Настройка дедлайнов", чтобы вернуться в предыдущее меню
+    deadlines = await get_user_deadlines_from_db(callback.from_user.id)
+    await callback.message.edit_text(
+        "🔧 Здесь вы можете управлять дедлайнами:",
+        reply_markup=get_deadlines_settings_keyboard(deadlines, 0, PAGE_SIZE, callback.from_user.id)
+    )
+    await callback.answer()
+    logger.info(f"Пользователь {callback.from_user.id} вернулся в настройки дедлайнов")
+
+# -------------------------------------------------------------------------------------------
+# FSM для настройки интервала уведомлений
 
 @router.callback_query(F.data == "set_interval")
 async def set_interval_start(callback: CallbackQuery, state: FSMContext):
@@ -658,7 +732,6 @@ async def set_interval_hours(message: types.Message, state: FSMContext):
 # -------------------------------------------------------------------------------------------
 # FSM для добавления нового дедлайна
 
-
 @router.message(Command("add"))
 @router.callback_query(F.data == "add_deadline")
 async def add_deadline_start(event: Union[types.Message, CallbackQuery], state: FSMContext):
@@ -672,7 +745,7 @@ async def add_deadline_start(event: Union[types.Message, CallbackQuery], state: 
     if isinstance(event, types.Message):  # Если через команду /add
         await event.answer(text, reply_markup=get_cancel_keyboard())
     elif isinstance(event, CallbackQuery):  # Если через кнопку
-        # Удаляение старого сообщения с кнопками настроек
+        # Удаление старого сообщения с кнопками настроек
         await event.message.delete()
         # Отправление нового сообщения с кнопкой отмены
         await event.message.answer(text, reply_markup=get_cancel_keyboard())
@@ -705,7 +778,7 @@ async def add_deadline_date(message: types.Message, state: FSMContext):
         if due_date.date() <= datetime.now().date():
             await message.answer("⛔️ Нельзя добавить дедлайн на уже <u>прошедшую</u> или <u>сегодняшнюю</u> дату.\n"
                                  "Введите дату, начиная с завтрашнего дня:", parse_mode="HTML")
-            return  # Остаёмся в том же состоянии, ожидая новый ввод
+            return  # Ожидание нового ввода при том же состоянии
     except ValueError:
         await message.answer("⛔️ Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:")
         return

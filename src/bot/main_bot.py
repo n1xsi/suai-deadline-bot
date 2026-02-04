@@ -2,7 +2,10 @@ from src.config import BOT_TOKEN, ADMIN_ID
 from src.database.engine import create_tables
 from src.bot.handlers import router as main_router
 from src.utils.logging import init_logger
-from src.scheduler.tasks import update_all_deadlines, send_deadline_notifications
+from src.scheduler.tasks import (
+    update_all_deadlines, send_deadline_notifications,
+    cleanup_expired_trashed_deadlines_task
+)
 
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
@@ -57,9 +60,12 @@ async def main():
     # Добавление задачи на отправку уведомлений
     scheduler.add_job(send_deadline_notifications, trigger='interval', hours=1, args=(bot,))
 
+    # Добавление задачи на очистку просроченных дедлайнов из корзин (один раз, в 6 часов утра)
+    scheduler.add_job(cleanup_expired_trashed_deadlines_task, trigger='cron', hour=6)
+
     """
     ### Тест системы уведомлений
-    await asyncio.sleep(2) 
+    await asyncio.sleep(2)
     await send_deadline_notifications(bot)
     """
 
