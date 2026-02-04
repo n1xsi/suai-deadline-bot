@@ -82,6 +82,7 @@ def get_deadlines_settings_keyboard(deadlines: list, current_page: int, page_siz
     # Дополнительные кнопки действий в отдельных рядах
     builder.row(InlineKeyboardButton(text="➕ Добавить собственный дедлайн", callback_data="add_deadline"))
     builder.row(InlineKeyboardButton(text="📨 Синхронизировать дедлайны с ЛК", callback_data=f"update_{user_id}"))
+    builder.row(InlineKeyboardButton(text="🗑️ Корзина", callback_data="open_trash_bin"))
 
     pagination_buttons = []
     if current_page > 0:
@@ -161,4 +162,40 @@ def get_update_button(user_id: int):
     """
     builder = InlineKeyboardBuilder()
     builder.button(text="Обновить", callback_data=f"update_{user_id}")
+    return builder.as_markup()
+
+
+def get_trash_bin_keyboard(deadlines: list, current_page: int, page_size: int):
+    """Создаёт пагинированную клавиатуру для корзины."""
+    builder = InlineKeyboardBuilder()
+    total_pages = (len(deadlines) + page_size - 1) // page_size
+
+    start_index = current_page * page_size
+    end_index = start_index + page_size
+    page_deadlines = deadlines[start_index:end_index]
+
+    # Кнопки для восстановления
+    for deadline in page_deadlines:
+        builder.button(
+            text=f"♻️ {deadline.course_name[:20]}... ({deadline.due_date.strftime('%d.%m')})",
+            callback_data=f"restore_{deadline.id}"
+        )
+
+    pagination_buttons = []
+    if current_page > 0:
+        pagination_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"trash_page_{current_page - 1}"))
+    if total_pages > 1:
+        pagination_buttons.append(InlineKeyboardButton(text=f"📄 {current_page + 1}/{total_pages}", callback_data="ignore"))
+    if current_page < total_pages - 1:
+        pagination_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"trash_page_{current_page + 1}"))
+    
+    if pagination_buttons:
+        builder.row(*pagination_buttons)
+
+    # Кнопки действий
+    if deadlines: # Показ кнопки "Очистить", только если корзина не пуста
+         builder.row(InlineKeyboardButton(text="💥 Очистить корзину", callback_data="empty_trash"))
+    builder.row(InlineKeyboardButton(text="⬅️ Назад в настройки", callback_data="back_to_settings"))
+
+    builder.adjust(*([1] * len(page_deadlines)))
     return builder.as_markup()

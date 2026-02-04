@@ -229,7 +229,11 @@ async def get_user_deadlines_from_db(telegram_id: int) -> list[Deadline]:
         # Поиск дедлайнов, которые ещё не прошли
         query = (
             select(Deadline)
-            .where(Deadline.user_id == user.id, Deadline.due_date >= datetime.now().date())
+            .where(
+                Deadline.user_id == user.id,
+                Deadline.due_date >= datetime.now().date(),
+                Deadline.is_trashed == False
+                )
             .order_by(Deadline.due_date.asc())
         )
         result = await session.execute(query)
@@ -268,13 +272,17 @@ async def get_deadline_by_id(deadline_id: int):
         return result.scalars().first()
 
 
-async def delete_deadline_by_id(deadline_id: int):
-    """Удаляет дедлайн по его ID."""
+async def move_deadline_to_trash(deadline_id: int):
+    """Перемещает дедлайн в корзину (устанавливает is_trashed = True)."""
     async with async_session_factory() as session:
-        query = delete(Deadline).where(Deadline.id == deadline_id)
+        query = (
+            update(Deadline)
+            .where(Deadline.id == deadline_id)
+            .values(is_trashed=True)
+        )
         await session.execute(query)
         await session.commit()
-        logger.success(f'Дедлайн с id={deadline_id} удалён')
+        logger.success(f'Дедлайн с id={deadline_id} перемещён в корзину')
 
 
 async def toggle_notifications(telegram_id: int) -> bool:
@@ -349,3 +357,51 @@ async def delete_all_custom_deadlines(telegram_id: int):
         await session.commit()
         logger.success(f'Все личные дедлайны удалены пользователю с telegram_id={telegram_id}')
         return True
+
+
+async def get_trashed_deadlines_from_db(telegram_id: int) -> list[Deadline]:
+    """Получает все дедлайны пользователя из корзины."""
+    async with async_session_factory() as session:
+        user = await get_user_by_telegram_id(telegram_id)
+        if not user: return []
+        query = (
+            select(Deadline)
+            .where(Deadline.user_id == user.id, Deadline.is_trashed == True)
+            .order_by(Deadline.due_date.desc())
+        )
+        result = await session.execute(query)
+        logger.success(f'Пользователь с telegram_id={telegram_id} получил {len(result.all())} дедлайнов из корзины')
+        return list(result.scalars().all())
+
+
+async def restore_deadline_from_trash(deadline_id: int):
+    """Восстанавливает дедлайн из корзины."""
+    async with async_session_factory() as session:
+        query = update(Deadline).where(Deadline.id == deadline_id).values(is_trashed=False)
+        await session.execute(query)
+        await session.commit()
+        logger.success(f'Дедлайн с id={deadline_id} восстановлен из корзины')
+
+
+async def empty_trash_for_user(telegram_id: int):
+    """Перманентно удаляет все дедлайны из корзины пользователя."""
+    async with async_session_factory() as session:
+        user = await get_user_by_telegram_id(telegram_id)
+        if not user: return False
+        query = delete(Deadline).where(Deadline.user_id == user.id, Deadline.is_trashed == True)
+        await session.execute(query)
+        await session.commit()
+        logger.success(f'Корзина очищена для пользователя с telegram_id={telegram_id}')
+        return True
+
+
+async def cleanup_expired_trashed_deadlines():
+    """Автоматически удаляет просроченные дедлайны из корзин всех пользователей."""
+    async with async_session_factory() as session:
+        query = delete(Deadline).where(
+            Deadline.is_trashed == True,
+            Deadline.due_date < datetime.now().date()
+        )
+        await session.execute(query)
+        await session.commit()
+        logger.success('Просроченные дедлайны из корзин всех пользователей удалены')

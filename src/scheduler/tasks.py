@@ -5,7 +5,8 @@ from aiogram import Bot
 from loguru import logger
 
 from src.database.queries import (
-    get_all_users, get_user_by_telegram_id, get_user_deadlines_from_db, update_user_deadlines
+    get_all_users, get_user_by_telegram_id, get_user_deadlines_from_db,
+    update_user_deadlines, cleanup_expired_trashed_deadlines
 )
 from src.parser.scraper import parse_lk_data
 from src.utils.crypto import decrypt_data
@@ -140,3 +141,9 @@ async def send_deadline_notifications(bot: Bot):
 
         await asyncio.sleep(1)
     logger.success("Задача отправки уведомлений завершена")
+
+async def cleanup_expired_trashed_deadlines_task():
+    """Задача для автоматической очистки просроченных дедлайнов из корзин."""
+    logger.info("Запуск задачи очистки просроченных дедлайнов из корзин...")
+    await cleanup_expired_trashed_deadlines()
+    logger.success("Задача очистки просроченных дедлайнов завершена.")

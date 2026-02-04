@@ -38,3 +38,4 @@ class Deadline(Base):
     due_date: Mapped[datetime] = mapped_column(nullable=False)
 
     is_custom: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false')
+    is_trashed: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false')
