@@ -402,6 +402,6 @@ async def cleanup_expired_trashed_deadlines():
             Deadline.is_trashed == True,
             Deadline.due_date < datetime.now().date()
         )
-        await session.execute(query)
+        result = await session.execute(query)
         await session.commit()
-        logger.success('Просроченные дедлайны из корзин всех пользователей удалены')
+        logger.success(f"Очищено {result.rowcount} просроченных дедлайнов из корзин.")
