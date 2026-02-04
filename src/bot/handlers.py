@@ -10,15 +10,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 from aiogram.exceptions import TelegramBadRequest
 
-from src.database.queries import (
-    add_user, set_user_credentials, update_user_deadlines, add_custom_deadline,
-    delete_deadline_by_id, toggle_notifications, update_notification_days,
-    get_user_by_telegram_id, get_user_deadlines_from_db, get_user_stats,
-    delete_user_data, set_notification_interval, get_deadline_by_id,
-    delete_all_custom_deadlines
-)
 from src.bot.states import Registration, AddDeadline, SetNotificationInterval
 from src.bot.filters import InStateFilter
+from src.database.queries import *
 from src.bot.keyboards import *
 
 from src.parser.scraper import parse_lk_data, _get_current_semester_id
@@ -27,7 +21,7 @@ from src.scheduler.tasks import update_user_deadlines_and_notify
 
 
 # Создание роутера (нужен для организации хэндлеров)
-# Хендлер - это функция, которая обрабатывает входящие сообщения и команды.
+# Хендлер - это функция, которая обрабатывает входящие сообщения и команды
 router = Router()
 
 PAGE_SIZE = 5  # Количество дедлайнов на одной странице
@@ -82,6 +76,7 @@ async def cmd_help(message: types.Message):
     await message.answer(help_text, parse_mode="HTML")
     logger.info(f"Пользователь {message.from_user.id} получил справку")
 
+
 @router.message(Command("update"))
 async def cmd_update(message: types.Message, state: FSMContext, bot: Bot):
     """Обработчик команды /update, обновляет дедлайны пользователя"""
@@ -114,7 +109,7 @@ async def start_login(bot: Bot, chat_id: int, state: FSMContext):
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext, bot: Bot):
     """Обработчик команды /start."""
-    await state.clear() # Команда /start сбрасывает состояние и ведёт в главное меню
+    await state.clear()  # Команда /start сбрасывает состояние и ведёт в главное меню
 
     is_new = await add_user(telegram_id=message.from_user.id, username=message.from_user.username)
 
@@ -143,10 +138,10 @@ async def process_password(message: types.Message, state: FSMContext):
     login = user_data.get('login')
     password = message.text
 
-    await message.delete() # Удаление сообщения с паролем для безопасности
+    await message.delete()  # Удаление сообщения с паролем для безопасности
 
     msg_to_delete = await message.answer("🔐 Пытаюсь войти в личный кабинет, это может занять минуту...")
-    await message.bot.send_chat_action(chat_id=message.chat.id, action="typing") # Показ "печатает..."
+    await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")  # Показ "печатает..."
 
     # Парсер - синхронный (использует requests), а бот - асинхронный
     # Поэтому запуск парсера происходит в отдельном потоке, чтобы не блокировать бота
@@ -389,11 +384,13 @@ async def deadlines_page_callback(callback: CallbackQuery):
     )
     await callback.answer()
 
+
 async def check_lk_auth(user_id: int):
     user = await get_user_by_telegram_id(user_id)
     if not user:
         return False
     return bool(user.encrypted_login_lk and user.encrypted_password_lk)
+
 
 @router.callback_query(F.data.startswith("update_"))
 async def update_deadlines_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
@@ -410,6 +407,7 @@ async def update_deadlines_callback(callback: CallbackQuery, state: FSMContext, 
         return
     await update_user_deadlines_and_notify(bot, user_id, force_notify=True)
     await callback.answer()
+
 
 @router.callback_query(F.data.startswith("settings_page_"))
 async def settings_page_callback(callback: CallbackQuery):
@@ -535,7 +533,7 @@ async def confirm_delete_deadline_callback(callback: CallbackQuery):
         "🚮 Дедлайн удален. Вот обновленный список:",
         reply_markup=get_deadlines_settings_keyboard(
             deadlines,
-            current_page=0, # Возврат на первую страницу
+            current_page=0,  # Возврат на первую страницу
             page_size=PAGE_SIZE,
             user_id=callback.from_user.id
         )
