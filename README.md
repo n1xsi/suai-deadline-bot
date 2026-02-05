@@ -11,11 +11,13 @@
   ![SQLAlchemy](https://custom-icon-badges.demolab.com/badge/2.0-ff480d?logo=sqlalchemy&label=SQLAlchemy&labelColor=242523&style=for-the-badge)
   [![License](https://custom-icon-badges.demolab.com/badge/MIT-ff480d?logo=law&label=License&labelColor=242523&style=for-the-badge)](LICENSE)
   
+  [![Build & Deploy Telegram Bot](https://github.com/n1xsi/suai-deadline-bot/actions/workflows/deploy.yml/badge.svg)](https://github.com/n1xsi/suai-deadline-bot/actions/workflows/deploy.yml)
+  
 </h1>
 
 Телеграм-бот для студентов ГУАП, который автоматически отслеживает дедлайны в личном кабинете и присылает уведомления. Проект выполнен в рамках <b><i>учебной практики</i></b>🎓.
 
-Опробовать: [@suai_deadline_bot](https://t.me/suai_deadline_bot)
+### Опробовать: [@suai_deadline_bot](https://t.me/suai_deadline_bot).
 
 ## ✨ Функционал бота (скоро обновится)
 
