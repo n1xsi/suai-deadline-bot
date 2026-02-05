@@ -161,7 +161,8 @@ async def get_users_with_upcoming_deadlines(days: int):
             .where(func.date(Deadline.due_date) == target_date)
         )
         result = await session.execute(query)
-        logger.success(f'Пользователи с дедлайнами наступающими в {days} дней: {len(result.all())}')
+        data = result.all()
+        logger.success(f'Пользователи с дедлайнами наступающими в {days} дней: {len(data)}')
         return result.all()  # Возврат пары (User, Deadline)
 
 
@@ -370,8 +371,9 @@ async def get_trashed_deadlines_from_db(telegram_id: int) -> list[Deadline]:
             .order_by(Deadline.due_date.desc())
         )
         result = await session.execute(query)
-        logger.success(f'Пользователь с telegram_id={telegram_id} получил {len(result.all())} дедлайнов из корзины')
-        return list(result.scalars().all())
+        deadlines = result.scalars().all()
+        logger.success(f'Пользователь с telegram_id={telegram_id} получил {len(deadlines)} дедлайнов из корзины')
+        return list(deadlines)
 
 
 async def restore_deadline_from_trash(deadline_id: int):
