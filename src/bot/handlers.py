@@ -622,7 +622,7 @@ async def show_trash_bin(callback: CallbackQuery, page: int = 0):
     """Вспомогательная функция для отображения содержимого корзины."""
     trashed_deadlines = await get_trashed_deadlines_from_db(callback.from_user.id)
     if not trashed_deadlines:
-        text = "🗑️ Корзина пуста."
+        text = "🗑️ 🧹 Корзина пуста."
     else:
         text = "🗑️ Здесь находятся удаленные вами дедлайны. Нажмите на любой, чтобы восстановить его."
 
@@ -659,13 +659,14 @@ async def restore_deadline_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "empty_trash")
 async def empty_trash_confirm_callback(callback: CallbackQuery):
     await callback.message.edit_text(
-        "Вы уверены, что хотите <b>перманентно</b> удалить все дедлайны из корзины?",
+        "Вы уверены, что хотите <b>перманентно</b> удалить <u>все</u> дедлайны из корзины?",
         reply_markup=get_confirm_keyboard(
             confirm_text="Да, очистить",
             confirm_callback="confirm_empty_trash",
             cancel_text="Нет, отмена",
             cancel_callback="open_trash_bin"  # Возврат в корзину
-        )
+        ),
+        parse_mode="HTML"
     )
     await callback.answer()
     logger.info(f"Пользователь {callback.from_user.id} пытается очистить корзину")
