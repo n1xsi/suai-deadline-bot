@@ -31,7 +31,7 @@ def get_profile_keyboard(custom_deadlines_count: int = 0):
             callback_data="delete_all_custom"
         )
 
-    builder.button(text="🗑️ Удалить все мои данные", callback_data="delete_my_data")
+    builder.button(text="📛 Удалить все мои данные", callback_data="delete_my_data")
     builder.adjust(1)  # Расположение кнопок по одной в строке
     return builder.as_markup()
 
@@ -171,7 +171,7 @@ def get_update_button(user_id: int):
     Создаёт кнопку для обновления дедлайнов.
     """
     builder = InlineKeyboardBuilder()
-    builder.button(text="Обновить", callback_data=f"update_{user_id}")
+    builder.button(text="🔄 Обновить", callback_data=f"update_{user_id}")
     return builder.as_markup()
 
 
@@ -204,7 +204,7 @@ def get_trash_bin_keyboard(deadlines: list, current_page: int, page_size: int):
 
     # Кнопки действий
     if deadlines: # Показ кнопки "Очистить", только если корзина не пуста
-         builder.row(InlineKeyboardButton(text="💥 Очистить корзину", callback_data="empty_trash"))
+         builder.row(InlineKeyboardButton(text="💥 Очистить корзину 💥", callback_data="empty_trash"))
     builder.row(InlineKeyboardButton(text="⬅️ Назад в настройки", callback_data="back_to_settings"))
 
     builder.adjust(*([1] * len(page_deadlines)))
