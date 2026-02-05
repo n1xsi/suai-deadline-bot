@@ -102,8 +102,18 @@ def get_deadlines_settings_keyboard(deadlines: list, current_page: int, page_siz
     if pagination_buttons:
         builder.row(*pagination_buttons)
 
-    # Выстраивание кнопок: по одной на дедлайн, затем действия и ряд пагинации
-    builder.adjust(*([1] * len(page_deadlines)), 1, 1, len(pagination_buttons))
+    # Формирование схемы расположения кнопок:
+    # По одной кнопке на каждый дедлайн
+    sizes = [1] * len(page_deadlines)
+
+    # Три статические кнопки, каждая в своем ряду (Добавить, Обновить, Корзина)
+    sizes.extend([1, 1, 1])
+
+    # Если есть пагинация - добавление её размера (кол-во кнопок в ряду пагинации)
+    if pagination_buttons:
+        sizes.append(len(pagination_buttons))
+
+    builder.adjust(*sizes)
     return builder.as_markup()
 
 
