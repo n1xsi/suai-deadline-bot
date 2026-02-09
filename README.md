@@ -6,10 +6,10 @@
     
   SUAI Deadline Bot 🤖🔥
 
-  ![Python](https://custom-icon-badges.demolab.com/badge/3.10+-ff480d?logo=pythonn&label=Python&labelColor=242523&style=for-the-badge)
-  ![aiogram](https://img.shields.io/badge/aiogram-3.x-ff480d?style=for-the-badge&logo=telegram&labelColor=242523)
-  ![SQLAlchemy](https://custom-icon-badges.demolab.com/badge/2.0-ff480d?logo=sqlalchemy&label=SQLAlchemy&labelColor=242523&style=for-the-badge)
-  [![License](https://custom-icon-badges.demolab.com/badge/MIT-ff480d?logo=law&label=License&labelColor=242523&style=for-the-badge)](LICENSE)
+  [![Python](https://custom-icon-badges.demolab.com/badge/3.10+-ff480d?logo=pythonn&label=Python&labelColor=242523&style=for-the-badge)](#)
+  [![aiogram](https://img.shields.io/badge/aiogram-3.x-ff480d?style=for-the-badge&logo=telegram&labelColor=242523)](#)
+  [![SQLAlchemy](https://custom-icon-badges.demolab.com/badge/2.0-ff480d?logo=sqlalchemy&label=SQLAlchemy&labelColor=242523&style=for-the-badge)](#)
+  ![Docker](https://custom-icon-badges.demolab.com/badge/Container-ff480d?logo=docker&label=Docker&labelColor=242523&style=for-the-badge)
   
   [![Build & Deploy Telegram Bot](https://github.com/n1xsi/suai-deadline-bot/actions/workflows/deploy.yml/badge.svg)](https://github.com/n1xsi/suai-deadline-bot/actions/workflows/deploy.yml)
   
@@ -17,7 +17,7 @@
 
 Телеграм-бот для студентов ГУАП, который автоматически отслеживает дедлайны в личном кабинете и присылает уведомления. Проект выполнен в рамках <b><i>учебной практики</i></b>🎓.
 
-### Опробовать: [@suai_deadline_bot](https://t.me/suai_deadline_bot).
+### Опробовать в Telegram: [@suai_deadline_bot](https://t.me/suai_deadline_bot).
 
 ## ✨ Функционал бота (скоро обновится)
 
@@ -161,7 +161,7 @@ suai-deadline-bot/
 
 ## ☺️ Special thanks
 * [@f0rgenet](https://github.com/f0rgenet) - <b>важная</b> помощь с бекендом 🐍🙏
-* @oodwyn - тестирование, багрепорты, привнесение фичей ✨
+* [@oodwyn](https://github.com/oodwyn) - тестирование, багрепорты, привнесение фичей ✨
 
 ## 📄 Лицензия
 
