@@ -265,14 +265,19 @@ async def show_profile(message: types.Message):
 
     active_count = stats.get('active_deadlines', 0)
     custom_count = stats.get('custom_deadlines', 0)
+    trashed_count = stats.get('trashed_deadlines', 0)
 
     profile_text = (
         f"{greeting}\n\n"
         f"🎓 Текущий семестр: <b>{semester_name}</b>\n\n"
         f"Активных дедлайнов: <b>{active_count}</b>"
     )
+
     if custom_count > 0:
         profile_text += f"\n📌 из них <i>личных</i>: <b>{custom_count}</b>"
+
+    if trashed_count > 0:
+        profile_text += f"\n🗑️ В корзине: <b>{trashed_count}</b>"
 
     await message.answer(
         profile_text,

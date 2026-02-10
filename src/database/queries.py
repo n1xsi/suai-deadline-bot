@@ -174,10 +174,11 @@ async def get_user_stats(telegram_id: int) -> dict:
             logger.error(f'Не удалось получить статистику пользователя с telegram_id={telegram_id}, пользователя не существует')
             return {}
 
-        # Подсчёт всех дедлайнов
+        # Подсчёт всех активных дедлайнов
         all_active_query = select(func.count(Deadline.id)).where(
             Deadline.user_id == user.id,
-            Deadline.due_date >= datetime.now().date()
+            Deadline.due_date >= datetime.now().date(),
+            Deadline.is_trashed == False
         )
         all_active_count = await session.execute(all_active_query)
 
@@ -185,18 +186,28 @@ async def get_user_stats(telegram_id: int) -> dict:
         custom_active_query = select(func.count(Deadline.id)).where(
             Deadline.user_id == user.id,
             Deadline.due_date >= datetime.now().date(),
-            Deadline.is_custom == True
+            Deadline.is_custom == True,
+            Deadline.is_trashed == False
         )
         custom_active_count = await session.execute(custom_active_query)
-        
+
+        # Подсчёт дедлайнов в корзине
+        trashed_query = select(func.count(Deadline.id)).where(
+            Deadline.user_id == user.id,
+            Deadline.is_trashed == True
+        )
+        trashed_active_count = await session.execute(trashed_query)
+
         active_count = all_active_count.scalar_one_or_none() or 0
         custom_count = custom_active_count.scalar_one_or_none() or 0
+        trashed_count = trashed_active_count.scalar_one_or_none() or 0
 
-        logger.success(f'Статистика пользователя {telegram_id}: {active_count} активных дедлайнов, {custom_count} личных')
+        logger.success(f'Статистика пользователя {telegram_id}: {active_count} активных дедлайнов, {custom_count} личных, {trashed_count} в корзине')
 
         return {
             "active_deadlines": active_count,
-            "custom_deadlines": custom_count
+            "custom_deadlines": custom_count,
+            "trashed_deadlines": trashed_count
         }
 
 
