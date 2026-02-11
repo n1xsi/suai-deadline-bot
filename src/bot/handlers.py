@@ -772,7 +772,11 @@ async def add_deadline_course(message: types.Message, state: FSMContext):
 @router.message(AddDeadline.waiting_for_task_name, F.text)
 async def add_deadline_task(message: types.Message, state: FSMContext):
     await state.update_data(task_name=message.text)
-    await message.answer("[3️⃣/3️⃣] Теперь введите дату сдачи в формате ДД.ММ.ГГГГ (например, 25.12.2025):")
+
+    tomorrow_date = datetime.now() + timedelta(days=1)
+    date_example = tomorrow_date.strftime("%d.%m.%Y")
+
+    await message.answer(f"[3️⃣/3️⃣] Теперь введите дату сдачи в формате ДД.ММ.ГГГГ (например, {date_example}):")
     await state.set_state(AddDeadline.waiting_for_due_date)
 
 
