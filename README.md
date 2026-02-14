@@ -6,7 +6,7 @@
     
   SUAI Deadline Bot 🤖🔥
 
-  [![Python](https://custom-icon-badges.demolab.com/badge/3.10+-ff480d?logo=pythonn&label=Python&labelColor=242523&style=for-the-badge)](#)
+  [![Python](https://custom-icon-badges.demolab.com/badge/3.11+-ff480d?logo=pythonn&label=Python&labelColor=242523&style=for-the-badge)](#)
   [![aiogram](https://img.shields.io/badge/aiogram-3.x-ff480d?style=for-the-badge&logo=telegram&labelColor=242523)](#)
   [![SQLAlchemy](https://custom-icon-badges.demolab.com/badge/2.0-ff480d?logo=sqlalchemy&label=SQLAlchemy&labelColor=242523&style=for-the-badge)](#)
   [![Docker](https://custom-icon-badges.demolab.com/badge/Container-ff480d?logo=docker&label=Docker&labelColor=242523&style=for-the-badge)](#)
@@ -19,14 +19,14 @@
 
 ### Опробовать в Telegram: [@suai_deadline_bot](https://t.me/suai_deadline_bot).
 
-## ✨ Функционал бота (скоро обновится)
+## ✨ Функционал бота
 
 Бот предоставляет широкий набор инструментов для управления учебными дедлайнами, делая студенческую жизнь проще и организованнее.
 
 <div align="center">
   
-  ![Демонстрация](https://i.imgur.com/98pM8ZA.gif)
-
+  ![Демонстрация](https://i.imgur.com/uuc50w3.gif)
+  
 </div>
 
 ### 🔔 Автоматизация и уведомления
