@@ -130,17 +130,41 @@ def _extract_deadlines(session: requests.Session) -> Optional[List[Dict[str, str
         soup = BeautifulSoup(response.text, 'html.parser')
         deadlines = []
 
-        for row in soup.find_all('tr'):
-            subject_tag = row.find('a', class_='blue-link')
-            taskname_tag = row.find('a', class_='link-switch-blue')
-            date_tag = row.select_one('td.text-center span.text-info, td.text-center span.text-warning')
+        # Поиск всех строк таблицы
+        rows = soup.find_all('tr')
+        for row in rows:
+            cols = row.find_all('td')
 
-            if subject_tag and taskname_tag and date_tag:
-                deadlines.append({
-                    'subject': subject_tag.get_text(strip=True),
-                    'task': taskname_tag.get_text(strip=True),
-                    'due_date': date_tag.get_text(strip=True)
-                })
+            # Проверка, что это строка с данными (в ней должно быть достаточно колонок)
+            if len(cols) < 8:  # В таблице ГУАП обычно 10 колонок
+                continue
+
+            # Колонка 2: "Дисциплина"
+            subject_tag = cols[1].find('a')  # Поиск ссылки внутри 2-й ячейки (индекс 1)
+            if not subject_tag:
+                continue
+            subject = subject_tag.get_text(strip=True)
+
+            # Колонка 4: "Название" (задания)
+            task_tag = cols[3].find('a')  # Поиск ссылки внутри 4-й ячейки (индекс 3)
+            if not task_tag:
+                continue
+            task = task_tag.get_text(strip=True)
+
+            # Колонка 8: "Предельная дата"
+            date_text = cols[7].get_text(strip=True)  # Поиск текста внутри 8-й ячейки (индекс 7)
+
+            # Если дата = "Не указана" или пустая - пропуск этого "дедлайна"
+            if not date_text or date_text == "Не указана":
+                continue
+
+            # Если есть дата - добавляем дедлайн в список
+            deadlines.append({
+                'subject': subject,
+                'task': task,
+                'due_date': date_text
+            })
+
         logger.success(f"Парсер нашел {len(deadlines)} дедлайнов")
         return deadlines
     except requests.RequestException as e:
