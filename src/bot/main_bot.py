@@ -1,16 +1,17 @@
-from src.config import BOT_TOKEN, ADMIN_ID
-from src.database.engine import create_tables
 from src.bot.handlers import router as main_router
+from src.database.engine import create_tables
+from src.config import BOT_TOKEN, ADMIN_ID
+
 from src.utils.logging import init_logger
 from src.scheduler.tasks import (
     update_all_deadlines, send_deadline_notifications,
     cleanup_expired_trashed_deadlines_task
 )
 
-from aiogram import Bot, Dispatcher
-from aiogram.types import BotCommand
-from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
+from aiogram import Bot, Dispatcher
 
 from loguru import logger
 import asyncio
@@ -77,6 +78,7 @@ async def main():
         await dp.start_polling(bot)
     finally:
         await bot.session.close()
+
 
 if __name__ == "__main__":
     try:
