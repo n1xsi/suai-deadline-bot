@@ -78,22 +78,25 @@ async def get_user_by_telegram_id(telegram_id: int):
 
 async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dict]) -> List[Dict]:
     """
-    "Умно" синхронизирует дедлайны из парсера с базой данных, не трогая дедлайны, добавленные вручную.
+    "Умно" синхронизирует дедлайны из парсера с базой данных:
+    1) Не трогает личные дедлайны (добавленные вручную)
+    2) Не добавляет дедлайны, которые занесены в корзину
+    3) Обновляет дату, если срок сдачи дедлайна изменился
+
     Возвращает список словарей с данными о вновь добавленных дедлайнах.
     """
-    # TODO: Разбить на несколько функций
     async with async_session_factory() as session:
         user = await get_user_by_telegram_id(telegram_id)
         if not user:
             return []
 
-        # Получаение всех существующих "парсерных" дедлайнов из БД (не личных)
+        # Получение ВСЕХ парсерных дедлайнов (и активных, и из корзины)
         existing_deadlines_query = await session.execute(
             select(Deadline).where(Deadline.user_id == user.id, Deadline.is_custom == False)
         )
         existing_deadlines_list = existing_deadlines_query.scalars().all()
 
-        # Создание множества для быстрой проверки (ключ - предмет+задание)
+        # Создание множества для быстрой проверки (ключ: предмет + задание)
         existing_deadlines_set = {
             (d.course_name, d.task_name): d for d in existing_deadlines_list
         }
@@ -115,20 +118,19 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
         objects_to_add_in_db = []
 
         for key, data in parsed_deadlines_set.items():
-            if key not in existing_deadlines_set:
-                try:
-                    due_date_obj = datetime.strptime(data['due_date'], "%d.%m.%Y")
-                except ValueError:
-                    continue
+            try:
+                due_date_obj = datetime.strptime(data['due_date'], "%d.%m.%Y")
+            except ValueError:
+                continue
 
-                # Сохранение данных о новом дедлайне
+            # Новый дедлайн, которого нет в БД
+            if key not in existing_deadlines_set:
                 newly_added_deadlines_data.append({
                     'course_name': data['subject'],
                     'task_name': data['task'],
                     'due_date': due_date_obj
                 })
 
-                # Создание объекта для добавления в БД
                 objects_to_add_in_db.append(
                     Deadline(
                         user_id=user.id,
@@ -138,6 +140,16 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
                         is_custom=False
                     )
                 )
+
+            # Дедлайн уже есть в БД
+            else:
+                # Проверка, изменилась ли дата сдачи на сайте
+                existing_dl = existing_deadlines_set
+
+                # Сравнивание дат
+                if existing_dl.due_date.date() != due_date_obj.date():
+                    existing_dl.due_date = due_date_obj
+
 
         if objects_to_add_in_db:
             session.add_all(objects_to_add_in_db)
