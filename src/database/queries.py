@@ -144,7 +144,7 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
             # Дедлайн уже есть в БД
             else:
                 # Проверка, изменилась ли дата сдачи на сайте
-                existing_dl = existing_deadlines_set
+                existing_dl = existing_deadlines_set[key]
 
                 # Сравнивание дат
                 if existing_dl.due_date.date() != due_date_obj.date():
@@ -155,7 +155,9 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
             session.add_all(objects_to_add_in_db)
 
         await session.commit()
-        logger.success(f'Добавлено {len(objects_to_add_in_db)} дедлайнов') 
+        if objects_to_add_in_db:
+            logger.success(f'Добавлено {len(objects_to_add_in_db)} дедлайнов')
+
         return newly_added_deadlines_data
 
 
