@@ -181,7 +181,7 @@ def parse_lk_data(username: str, password: str) -> Optional[Tuple[List[Dict], Op
 
     # Авторизация
     if not _perform_login(session, username, password):
-        return NotImplemented
+        return None
 
     # Получаение страницы профиля один раз
     profile_response = session.get(f"{BASE_URL}/inside/profile")
