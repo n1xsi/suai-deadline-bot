@@ -26,6 +26,14 @@ class TelegramSink:
         self.bot = bot
         self.chat_id = chat_id
 
+    async def _safe_send_log(self, text: str):
+        try:
+            await self.bot.send_message(self.chat_id, text)
+        except Exception as e:
+            # Если Telegram недоступен (Bad Gateway и прочие спамящие ошибки) - просто игнорируем
+            # Ошибка всё равно запишется в файл logs/bot_...log
+            pass
+
     def __call__(self, message):
         record = message.record
         if record["level"].name in ("ERROR", "CRITICAL"):
@@ -37,9 +45,10 @@ class TelegramSink:
             )
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                asyncio.create_task(self.bot.send_message(self.chat_id, text))
+                # Вызов безопасного метода _safe_send_log в loop-режиме
+                asyncio.create_task(self.bot._safe_send_log(self.chat_id, text))
             else:
-                loop.run_until_complete(self.bot.send_message(self.chat_id, text))
+                loop.run_until_complete(self.bot._safe_send_log(self.chat_id, text))
 
 
 def init_logger(bot: Bot, chat_id: int, level: str = "DEBUG"):
