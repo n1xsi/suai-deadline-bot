@@ -1,14 +1,14 @@
-from typing import Union
 from datetime import datetime
+from typing import Union
 import asyncio
 
 from loguru import logger
 
-from aiogram import Bot, Router, F, types
-from aiogram.filters import CommandStart, Command
-from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import CommandStart, Command
+from aiogram.fsm.context import FSMContext
+from aiogram import Bot, Router, F, types
 
 from src.bot.states import Registration, AddDeadline, SetNotificationInterval
 from src.bot.filters import InStateFilter
@@ -105,14 +105,13 @@ async def start_login(bot: Bot, chat_id: int, state: FSMContext):
     )
     
 
-# Хэндлер, который срабатывает на "/start"
+# Хендлер, срабатывающий на "/start"
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext, bot: Bot):
     """Обработчик команды /start."""
-    await state.clear()  # Команда /start сбрасывает состояние и ведёт в главное меню
+    await state.clear()  # Сбрасывает любое состояние и ведёт в главное меню
 
     is_new = await add_user(telegram_id=message.from_user.id, username=message.from_user.username)
-
     if is_new:
         await start_login(bot, message.from_user.id, state)
     else:
@@ -148,7 +147,7 @@ async def process_password(message: types.Message, state: FSMContext):
     loop = asyncio.get_event_loop()
     parsed_data = await loop.run_in_executor(None, parse_lk_data, login, password)
 
-    await msg_to_delete.delete()  # Удаление сообщения "Пытаюсь войти ..."
+    await msg_to_delete.delete()  # Удаление сообщения от бота "Пытаюсь войти ..."
 
     if parsed_data is None:
         await message.answer(
@@ -197,7 +196,7 @@ async def process_password(message: types.Message, state: FSMContext):
 # -------------------------------------------------------------------------------------------
 # Основные команды меню
 
-
+4
 def format_deadlines_page(deadlines: list, page: int, page_size: int = 5) -> str:
     """
     Формирует текст одной страницы со списком дедлайнов.
@@ -329,9 +328,7 @@ async def update_notification_settings_menu(callback: CallbackQuery):
         return
 
     try:
-        await callback.message.edit_reply_markup(
-            reply_markup=get_notification_settings_keyboard(user)
-        )
+        await callback.message.edit_reply_markup(reply_markup=get_notification_settings_keyboard(user))
     except TelegramBadRequest as e:
         if "message is not modified" in str(e):
             await callback.answer()
@@ -365,7 +362,7 @@ async def settings_deadlines_menu(message: types.Message):
 @router.callback_query(F.data.startswith("page_"))
 async def deadlines_page_callback(callback: CallbackQuery):
     """
-    Хэндлер, обрабатывающий переключение страниц в списке дедлайнов.
+    Хендлер, обрабатывающий переключение страниц в списке дедлайнов.
     """
     if not callback.data or not callback.message:
         logger.error("Не удалось обработать callback-запрос для обработки страницы с callback_id={callback.id}")
@@ -400,7 +397,7 @@ async def check_lk_auth(user_id: int):
 @router.callback_query(F.data.startswith("update_"))
 async def update_deadlines_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """
-    Хэндлер, обрабатывающий кнопку обновления дедлайнов.
+    Хендлер, обрабатывающий кнопку обновления дедлайнов.
     """
     if not callback.data or not callback.message:
         logger.error("Не удалось обработать callback-запрос для обработки кнопки обновления дедлайнов")
@@ -417,7 +414,7 @@ async def update_deadlines_callback(callback: CallbackQuery, state: FSMContext, 
 @router.callback_query(F.data.startswith("settings_page_"))
 async def settings_page_callback(callback: CallbackQuery):
     """
-    Хэндлер, обрабатывающий переключение страниц в меню настройки дедлайнов.
+    Хендлер, обрабатывающий переключение страниц в меню настройки дедлайнов.
     """
     if not callback.data or not callback.message:
         logger.error("Не удалось обработать callback-запрос для обработки переключения страниц в меню настройки дедлайнов")
@@ -438,13 +435,13 @@ async def settings_page_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "ignore")
 async def ignore_callback(callback: CallbackQuery):
-    """Пустой хэндлер, чтобы нажатие на кнопку ничего не делало."""
+    """Пустой хендлер, чтобы нажатие на кнопку ничего не делало."""
     await callback.answer()
 
 
 @router.callback_query(F.data == "delete_my_data")
 async def on_delete_data(callback: CallbackQuery):
-    """Хэндлер, запрашивающий подтверждение на удаление всех личных данных."""
+    """Хендлер, запрашивающий подтверждение на удаление всех личных данных."""
     await callback.message.edit_text(
         "🗑️ Вы уверены, что хотите отписаться и удалить все свои данные?\n"
         "❗️ Это действие <b><u>необратимо</u></b>.",
@@ -462,7 +459,7 @@ async def on_delete_data(callback: CallbackQuery):
 
 @router.callback_query(F.data == "confirm_delete")
 async def on_confirm_delete(callback: CallbackQuery):
-    """Хэндлер, обрабатывающий подтверждение на удаление всех личных данных."""
+    """Хендлер, обрабатывающий подтверждение на удаление всех личных данных."""
     deleted = await delete_user_data(callback.from_user.id)
     if deleted:
         # Удаление клавиатуры главного меню
@@ -485,7 +482,7 @@ async def on_confirm_delete(callback: CallbackQuery):
 
 @router.callback_query(F.data == "cancel_delete")
 async def on_cancel_delete(callback: CallbackQuery):
-    """Хэндлер, обрабатывающий отмену удаления."""
+    """Хендлер, обрабатывающий отмену удаления."""
     await callback.message.edit_text("❕ Удаление отменено.", reply_markup=None)
     await callback.answer()
     logger.info(f"Пользователь {callback.from_user.id} отменил удаление своих данных")
@@ -494,7 +491,7 @@ async def on_cancel_delete(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("del_deadline_"))
 async def delete_deadline_confirm_callback(callback: CallbackQuery):
     """
-    Хэндлер, запрашивающий подтверждение на удаление дедлайна.
+    Хендлер, запрашивающий подтверждение на удаление дедлайна.
     """
     deadline_id = int(callback.data.split("_")[2])
     deadline = await get_deadline_by_id(deadline_id)
@@ -527,12 +524,12 @@ async def delete_deadline_confirm_callback(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("confirm_del_deadline_"))
 async def confirm_delete_deadline_callback(callback: CallbackQuery):
     """
-    Хэндлер, который срабатывает при подтверждении и окончательно удаляет дедлайн.
+    Хендлер, который срабатывает при подтверждении и окончательно удаляет дедлайн.
     """
     deadline_id = int(callback.data.split("_")[3])
     await move_deadline_to_trash(deadline_id)
 
-    # Обновление исходного меню настроек, чтобы показать, что дедлайн исчез
+    # Обновление исходного меню настроек, чтобы показать исчезновение дедлайна
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
     await callback.message.edit_text(
         "🚮 Дедлайн перемещён в корзину. Вот обновленный список:",
@@ -550,7 +547,7 @@ async def confirm_delete_deadline_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "cancel_del_deadline")
 async def cancel_delete_deadline_callback(callback: CallbackQuery):
     """
-    Хэндлер, который срабатывает при отмене удаления, возвращая пользователя
+    Хендлер, который срабатывает при отмене удаления, возвращая пользователя
     в меню настроек дедлайнов.
     """
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
@@ -558,7 +555,7 @@ async def cancel_delete_deadline_callback(callback: CallbackQuery):
         "❕ Удаление отменено. Вы снова в меню управления дедлайнами.",
         reply_markup=get_deadlines_settings_keyboard(
             deadlines,
-            current_page=0, # Возврат на первую страницу
+            current_page=0,  # Возврат на первую страницу
             page_size=PAGE_SIZE,
             user_id=callback.from_user.id
         )
@@ -582,7 +579,7 @@ async def toggle_day_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "delete_all_custom")
 async def on_delete_all_custom(callback: CallbackQuery):
-    """Хэндлер, запрашивающий подтверждение на удаление всех личных дедлайнов."""
+    """Хендлер, запрашивающий подтверждение на удаление всех личных дедлайнов."""
     await callback.message.edit_text(
         "Вы уверены, что хотите удалить <b><u>ВСЕ</u></b> ваши личные дедлайны?\n"
         "Это действие необратимо!",
@@ -615,8 +612,7 @@ async def on_confirm_delete_all_custom(callback: CallbackQuery):
 async def on_cancel_delete_all_custom(callback: CallbackQuery):
     """Отменяет удаление и возвращает в профиль."""
     await callback.message.delete()  # Удаление сообщения с кнопкой подтверждения
-    # Показ профиля заново, чтобы пользователь не потерялся
-    await show_profile(callback.message)
+    await show_profile(callback.message)  # Снова показ профиля, чтобы пользователь не потерялся
     await callback.answer()
     logger.info("Пользователь отменил удаление всех личных дедлайнов")
 
@@ -680,14 +676,14 @@ async def empty_trash_confirm_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "confirm_empty_trash")
 async def empty_trash_confirmed_callback(callback: CallbackQuery):
     await empty_trash_for_user(callback.from_user.id)
-    await show_trash_bin(callback)  # Показываем теперь уже пустую корзину
+    await show_trash_bin(callback)  # Показ уже пустой корзины
     await callback.answer("💥 Корзина очищена!", show_alert=True)
     logger.info(f"Пользователь {callback.from_user.id} очистил корзину")
 
 
 @router.callback_query(F.data == "back_to_settings")
 async def back_to_settings_callback(callback: CallbackQuery):
-    # Функция "симулирует" нажатие на кнопку "Настройка дедлайнов", чтобы вернуться в предыдущее меню
+    """Функция 'симулирует' нажатие на кнопку 'Настройка дедлайнов', чтобы вернуться в предыдущее меню."""
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
     await callback.message.edit_text(
         "🔧 Здесь вы можете управлять дедлайнами:",
@@ -742,7 +738,7 @@ async def set_interval_hours(message: types.Message, state: FSMContext):
 @router.callback_query(F.data == "add_deadline")
 async def add_deadline_start(event: Union[types.Message, CallbackQuery], state: FSMContext):
     """
-    Универсальный хэндлер для начала добавления дедлайна.
+    Универсальный хендлер для начала добавления дедлайна.
     Срабатывает как на команду /add, так и на нажатие inline-кнопки.
     """
     text = "[1️⃣/3️⃣] Введите название предмета:"
