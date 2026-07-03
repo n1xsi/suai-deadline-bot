@@ -1,5 +1,4 @@
 from src.bot.handlers import router as main_router
-from src.database.engine import create_tables
 from src.config import BOT_TOKEN, ADMIN_ID
 
 from src.utils.logging import init_logger
@@ -37,9 +36,6 @@ async def main():
     """
     Основная функция, которая запускает бота
     """
-
-    # Создание таблиц в БД перед запуском бота (если их ещё нет)
-    await create_tables()
 
     # Инициализация бота с токеном
     bot = Bot(token=BOT_TOKEN)
