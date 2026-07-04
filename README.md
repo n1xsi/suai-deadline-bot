@@ -6,7 +6,7 @@
     
   SUAI Deadline Bot 🤖🔥
 
-  [![Python](https://custom-icon-badges.demolab.com/badge/3.11+-ff480d?logo=pythonn&label=Python&labelColor=242523&style=for-the-badge)](#)
+  [![Python](https://custom-icon-badges.demolab.com/badge/3.12+-ff480d?logo=pythonn&label=Python&labelColor=242523&style=for-the-badge)](#)
   [![aiogram](https://img.shields.io/badge/aiogram-3.x-ff480d?style=for-the-badge&logo=telegram&labelColor=242523)](#)
   [![SQLAlchemy](https://custom-icon-badges.demolab.com/badge/2.0-ff480d?logo=sqlalchemy&label=SQLAlchemy&labelColor=242523&style=for-the-badge)](#)
   [![Docker](https://custom-icon-badges.demolab.com/badge/Container-ff480d?logo=docker&label=Docker&labelColor=242523&style=for-the-badge)](#)
@@ -71,6 +71,18 @@
 
 Это обеспечивает бесшовное обновление бота на сервере без ручного вмешательства.
 
+#### 🔑 Настройка секретов репозитория
+
+Чтобы workflow заработал, в настройках репозитория (**Settings → Secrets and variables → Actions**) необходимо задать следующие секреты:
+
+| Секрет | Назначение |
+| :--- | :--- |
+| `DOCKER_HOST` | IP-адрес или домен сервера, куда идёт деплой. |
+| `DOCKER_USER` | Имя пользователя для SSH-подключения к серверу. |
+| `DOCKER_SSH_KEY` | Приватный SSH-ключ для доступа к серверу (публичная часть должна быть в `~/.ssh/authorized_keys` на сервере). |
+| `GHCR_PAT` | GitHub Personal Access Token со scope `read:packages` — используется сервером для авторизации в `ghcr.io` и скачивания образа. |
+| `ENV_FILE_CONTENT` | Полное содержимое файла `.env` (`BOT_TOKEN`, `ADMIN_ID`, `ENCRYPTION_KEY`). Workflow записывает его в `.env` на сервере перед запуском контейнера. |
+
 ## 🚀 Установка и запуск
 
 Есть два способа запуска проекта: **локально** для разработки и через **Docker** для production-окружения.
@@ -83,21 +95,21 @@
     ```
 
 2.  **Создайте и активируйте виртуальное окружение:**
-*  На Windows:
-    ``` bash
-    python -m venv .venv && .\.venv\Scripts\activate
-    ```
-*  На Linux / macOS:
-    ```bash
-    python3 -m venv .venv && source .venv/bin/activate
-    ```
+    *  На Windows:
+        ```bash
+        python -m venv .venv && .\.venv\Scripts\activate
+        ```
+    *  На Linux / macOS:
+        ```bash
+        python3 -m venv .venv && source .venv/bin/activate
+        ```
 
-4.  **Установите зависимости:**
+3.  **Установите зависимости:**
     ```bash
     pip install -r requirements.txt
     ```
 
-5.  **Настройте переменные окружения:**
+4.  **Настройте переменные окружения:**
     *   Создайте файл `.env` в корне проекта.
     *   Заполните его по примеру ниже:
     ```.env
@@ -109,6 +121,13 @@
         ```bash
         python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
         ```
+    *   Опционально можно задать `DB_PATH` — путь к файлу БД (по умолчанию `database/database.db`).
+
+5.  **Создайте директорию для базы данных:**
+    ```bash
+    mkdir database
+    ```
+    > SQLite не создаёт родительскую папку автоматически, поэтому её нужно завести заранее (путь по умолчанию — `database/database.db`).
 
 6.  **Примените миграции базы данных:**
     ```bash
@@ -124,7 +143,7 @@
 
 1.  Убедитесь, что у вас установлен [Docker](https://www.docker.com/).
 
-2.  Повторите шаги 1 и 4 из предыдущего способа.
+2.  Клонируйте репозиторий (шаг 1 выше) и настройте файл `.env` (шаг 4 выше). Устанавливать зависимости и создавать виртуальное окружение не нужно — это делается внутри образа.
 
 3.  Соберите Docker-образ:
     ```bash
@@ -142,9 +161,13 @@
       --name suai-bot-container \
       --restart unless-stopped \
       --env-file .env \
+      -e DB_PATH="/app/database/database.db" \
       -v "$(pwd)/database_storage:/app/database" \
       suai-deadline-bot
     ```
+    > **Миграции применяются автоматически.** При старте контейнер сначала выполняет `alembic upgrade head` (см. `docker-entrypoint.sh`), а затем запускает бота, поэтому схема БД всегда актуальна.
+    >
+    > Volume `-v "$(pwd)/database_storage:/app/database"` монтирует локальную папку в контейнер, а `DB_PATH` указывает боту хранить файл БД именно там. Благодаря этому данные сохраняются между перезапусками и обновлениями образа.
     
 
 ### 🗄 Управление миграциями базы данных (Alembic)
@@ -159,6 +182,8 @@
     ```bash
     alembic upgrade head
     ```
+
+> URL подключения к БД для Alembic не задаётся в `alembic.ini` — он подставляется в `alembic/env.py` из переменной `DB_PATH` (см. `src/config.py`). Благодаря этому миграции используют ту же базу, что и сам бот, как локально, так и в Docker.
 
 ## 📂 Архитектура проекта
 
@@ -210,6 +235,7 @@ suai-deadline-bot/
 ├── .gitignore            # Исключения для Git
 │
 ├── Dockerfile            # Инструкция по сборке Docker-образа
+├── docker-entrypoint.sh  # Скрипт запуска: миграции Alembic + старт бота
 ├── LICENSE               # Лицензия проекта
 │
 ├── alembic.ini           # Конфигурационный файл Alembic
@@ -225,7 +251,7 @@ suai-deadline-bot/
 
 ## 🛠 Технологический стек
 
-*   **Язык:** [Python 3.12.5](https://www.python.org/downloads/release/python-3125)
+*   **Язык:** [Python 3.12](https://www.python.org/downloads/release/python-3120)
 *   **Контейнеризация:** [Docker](https://docs.docker.com/)
 *   **Асинхронный фреймворк:** [asyncio](https://docs.python.org/3/library/asyncio.html)
 *   **Telegram Bot API:** [aiogram 3.x](https://docs.aiogram.dev/)
@@ -236,6 +262,7 @@ suai-deadline-bot/
 *   **Безопасность:** [cryptography](https://cryptography.io/en/latest) (шифрование учётных данных)
 
 ## ☺️ Special thanks
+
 * [@f0rgenet](https://github.com/f0rgenet) - **важная** помощь с бекендом 🐍🙏
 * [@oodwyn](https://github.com/oodwyn) - тестирование, багрепорты, привнесение фичей ✨
 
