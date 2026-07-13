@@ -25,6 +25,7 @@ class TelegramSink:
     def __init__(self, bot: Bot, chat_id: int):
         self.bot = bot
         self.chat_id = chat_id
+        self._pending = set()
 
     async def _safe_send_log(self, text: str):
         try:
@@ -43,12 +44,15 @@ class TelegramSink:
                 f"Function: {record['function']}\n"
                 f"Message: {record['message']}"
             )
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Вызов безопасного метода _safe_send_log в loop-режиме
-                asyncio.create_task(self.bot._safe_send_log(self.chat_id, text))
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                asyncio.run(self._safe_send_log(text))
             else:
-                loop.run_until_complete(self.bot._safe_send_log(self.chat_id, text))
+                # Ссылка на задачу сохраняется, иначе сборщик мусора может уничтожить её до отправки сообщения
+                task = loop.create_task(self._safe_send_log(text))
+                self._pending.add(task)
+                task.add_done_callback(self._pending.discard)
 
 
 def init_logger(bot: Bot, chat_id: int, level: str = "DEBUG"):
