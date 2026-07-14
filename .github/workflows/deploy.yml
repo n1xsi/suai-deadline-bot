@@ -46,13 +46,11 @@ jobs:
           ssh ${{ secrets.DOCKER_USER }}@${{ secrets.DOCKER_HOST }} << EOF
             set -e # Прерывать скрипт при ошибке
 
-            # Переменные
             APP_DIR="\$HOME/suai-deadline-bot"
             CONTAINER_NAME="suai-bot-container"
             IMAGE_ID="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:latest"
 
-            # Создаем директории для .env и для volume базы данных
-            mkdir -p "\$APP_DIR/database_storage"
+            mkdir -p "\$APP_DIR/database_storage" "\$APP_DIR/logs"
 
             echo "${{ secrets.ENV_FILE_CONTENT }}" > "\$APP_DIR/.env"
 
@@ -68,8 +66,11 @@ jobs:
             docker run -d \
               --name "\$CONTAINER_NAME" \
               --restart unless-stopped \
+              --log-opt max-size=10m \
+              --log-opt max-file=3 \
               --env-file "\$APP_DIR/.env" \
               -e DB_PATH="/app/database/database.db" \
               -v "\$APP_DIR/database_storage:/app/database" \
+              -v "\$APP_DIR/logs:/app/logs" \
               "\$IMAGE_ID"
           EOF
