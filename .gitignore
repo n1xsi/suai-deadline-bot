@@ -134,3 +134,7 @@ cython_debug/
 
 # Database
 *.db
+
+# Логи бота и выгрузки логов с сервера
+logs/
+logs.txt
