@@ -1,0 +1,4 @@
+# Защита от CRLF-переводов строк в скриптах и Dockerfile
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
+Dockerfile text eol=lf
