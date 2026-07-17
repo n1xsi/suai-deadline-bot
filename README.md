@@ -56,6 +56,8 @@
 *   **Шифрование:** Логин и пароль от ЛК хранятся в базе данных в **зашифрованном** виде.
 *   **Приватность:** При регистрации бот удаляет сообщение с паролем сразу после его отправки пользователем, не оставляя его в истории чата.
 *   **Продвинутое логирование:** Бот использует `Loguru` для записи всех действий в файлы и **мгновенной отправки критических ошибок** администратору бота в личные сообщения Telegram.
+    *   Файловые логи пишутся в `logs/bot_YYYY-MM-DD.log` с ротацией раз в неделю и хранением 3 недели.
+    *   Об ошибках, случившихся **до** старта бота (например, сбой миграций), администратора уведомляет сам `docker-entrypoint.sh`.
 
 ## 🐳 Docker и CI/CD
 
@@ -123,11 +125,11 @@
         ```
     *   Опционально можно задать `DB_PATH` — путь к файлу БД (по умолчанию `database/database.db`).
 
-5.  **Создайте директорию для базы данных:**
+5.  **Создайте директории для базы данных и логов:**
     ```bash
-    mkdir database
+    mkdir -p database logs
     ```
-    > SQLite не создаёт родительскую папку автоматически, поэтому её нужно завести заранее (путь по умолчанию — `database/database.db`).
+    > SQLite не создаёт родительскую папку автоматически, поэтому её нужно завести заранее (путь по умолчанию — `database/database.db`). В `logs/` `Loguru` пишет файлы `bot_YYYY-MM-DD.log`.
 
 6.  **Примените миграции базы данных:**
     ```bash
@@ -150,9 +152,9 @@
     docker build -t suai-deadline-bot .
     ```
 
-4.  Создайте директорию для хранения базы данных:
+4.  Создайте директории для хранения базы данных и логов:
     ```bash
-    mkdir database_storage
+    mkdir -p database_storage logs
     ```
 
 5.  Запустите контейнер:
@@ -160,15 +162,17 @@
     docker run -d \
       --name suai-bot-container \
       --restart unless-stopped \
+      --log-opt max-size=10m \
+      --log-opt max-file=3 \
       --env-file .env \
       -e DB_PATH="/app/database/database.db" \
       -v "$(pwd)/database_storage:/app/database" \
+      -v "$(pwd)/logs:/app/logs" \
       suai-deadline-bot
     ```
-    > **Миграции применяются автоматически.** При старте контейнер сначала выполняет `alembic upgrade head` (см. `docker-entrypoint.sh`), а затем запускает бота, поэтому схема БД всегда актуальна.
+    > **Миграции применяются автоматически.** При старте контейнер приводит схему БД в актуальное состояние и только потом запускает бота.
     >
-    > Volume `-v "$(pwd)/database_storage:/app/database"` монтирует локальную папку в контейнер, а `DB_PATH` указывает боту хранить файл БД именно там. Благодаря этому данные сохраняются между перезапусками и обновлениями образа.
-    
+    > Флаги `--log-opt` ограничивают вывод контейнера тремя файлами по 10 МБ. Без них драйвер `json-file` пишет лог без ротации.
 
 ### 🗄 Управление миграциями базы данных (Alembic)
 
@@ -182,7 +186,6 @@
     ```bash
     alembic upgrade head
     ```
-
 > URL подключения к БД для Alembic не задаётся в `alembic.ini` — он подставляется в `alembic/env.py` из переменной `DB_PATH` (см. `src/config.py`). Благодаря этому миграции используют ту же базу, что и сам бот, как локально, так и в Docker.
 
 ## 📂 Архитектура проекта
@@ -196,9 +199,12 @@ suai-deadline-bot/
 │       └── deploy.yml      # Workflow для CI/CD
 │
 ├── alembic/             # Конфигурация и версии миграций Alembic
-│   └── versions/
+│   ├── versions/           # Файлы миграций
+│   ├── env.py              # Окружение Alembic (подставляет DB_PATH, async-движок)
+│   └── script.py.mako      # Шаблон для новых миграций
 │
 ├── database_storage/    # Директория для хранения файла БД (НЕ В Git!)
+├── logs/                # Файловые логи Loguru (НЕ В Git!)
 │
 ├── src/                 # Основной пакет с исходным кодом
 │   ├── bot/                # Модуль взаимодействия с Telegram (Представление)
@@ -211,7 +217,7 @@ suai-deadline-bot/
 │   │
 │   ├── database/        # Модуль для работы с базой данных (Модель)
 │   │   ├── __init__.py
-│   │   ├── engine.py       # Создание движка и сессий SQLAlchemy
+│   │   ├── engine.py       # Создание движка и фабрики сессий SQLAlchemy
 │   │   ├── models.py       # Описание таблиц БД (User, Deadline)
 │   │   └── queries.py      # Функции с SQL-запросами
 │   │
@@ -226,16 +232,17 @@ suai-deadline-bot/
 │   ├── utils/           # Вспомогательные утилиты
 │   │   ├── __init__.py
 │   │   ├── crypto.py       # Функции для шифрования/дешифрования данных
-│   │   └── logging.py      # Функции для логирования
+│   │   └── logging.py      # Настройка Loguru, перехват logging, отправка ошибок в Telegram
 │   │
 │   └── config.py        # Глобальная конфигурация и загрузка переменных из .env
 │
 ├── .dockerignore         # Исключения для Docker-контекста
 ├── .env                  # Локальный файл для секретных ключей (НЕ В Git!)
+├── .gitattributes        # Принудительный LF для shell-скриптов и Dockerfile
 ├── .gitignore            # Исключения для Git
 │
 ├── Dockerfile            # Инструкция по сборке Docker-образа
-├── docker-entrypoint.sh  # Скрипт запуска: миграции Alembic + старт бота
+├── docker-entrypoint.sh  # Скрипт запуска: stamp legacy-БД + миграции Alembic + старт бота
 ├── LICENSE               # Лицензия проекта
 │
 ├── alembic.ini           # Конфигурационный файл Alembic
@@ -254,10 +261,10 @@ suai-deadline-bot/
 *   **Язык:** [Python 3.12](https://www.python.org/downloads/release/python-3120)
 *   **Контейнеризация:** [Docker](https://docs.docker.com/)
 *   **Асинхронный фреймворк:** [asyncio](https://docs.python.org/3/library/asyncio.html)
-*   **Telegram Bot API:** [aiogram 3.x](https://docs.aiogram.dev/)
-*   **База данных:** [SQLite](https://www.sqlite.org/docs.html) + [SQLAlchemy 2.0](https://docs.sqlalchemy.org/) (ORM) + [Alembic](https://alembic.sqlalchemy.org/) (миграции)
+*   **Telegram Bot API:** [aiogram 3.22](https://docs.aiogram.dev/) (long polling)
+*   **База данных:** [SQLite](https://www.sqlite.org/docs.html) + [SQLAlchemy 2.0](https://docs.sqlalchemy.org/) (ORM, асинхронный драйвер `aiosqlite`) + [Alembic](https://alembic.sqlalchemy.org/) (миграции)
 *   **Веб-парсинг:** [Requests](https://requests.readthedocs.io/) + [BeautifulSoup4](https://beautiful-soup-4.readthedocs.io/)
-*   **Планировщик задач:** [APScheduler](https://apscheduler.readthedocs.io/)
+*   **Планировщик задач:** [APScheduler](https://apscheduler.readthedocs.io/) (`AsyncIOScheduler`, таймзона `Europe/Moscow`)
 *   **Логирование:** [Loguru](https://loguru.readthedocs.io/)
 *   **Безопасность:** [cryptography](https://cryptography.io/en/latest) (шифрование учётных данных)
 
