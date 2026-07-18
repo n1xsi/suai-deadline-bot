@@ -5,6 +5,7 @@ from src.database.queries import (
 from src.parser.scraper import parse_lk_data
 from src.utils.crypto import decrypt_data
 
+from cryptography.fernet import InvalidToken
 from datetime import datetime
 
 from loguru import logger
@@ -33,8 +34,23 @@ async def update_user_deadlines_and_notify(bot: Bot, user_id: int, force_notify:
         return
 
     # Расшифровка данных
-    login = decrypt_data(user.encrypted_login_lk)
-    password = decrypt_data(user.encrypted_password_lk)
+    try:
+        login = decrypt_data(user.encrypted_login_lk)
+        password = decrypt_data(user.encrypted_password_lk)
+    except InvalidToken:
+        logger.error(
+            f"Не удалось расшифровать учётные данные пользователя {user.telegram_id}: "
+            f"возможно текущий ENCRYPTION_KEY не соответствует ключу, которым данные были зашифрованы"
+        )
+        if force_notify:
+            await bot.send_message(
+                chat_id=user.telegram_id,
+                text="⛔ Не удалось прочитать ваши сохранённые данные от личного кабинета — "
+                     "возникла проблема с ключом шифрования.\n\n"
+                     "🔑 Пожалуйста, пройдите регистрацию заново: команда /stop (удалит ваши данные), "
+                     "а затем /start."
+            )
+        return
 
     # Запуск парсера
     loop = asyncio.get_event_loop()
@@ -84,7 +100,11 @@ async def update_all_deadlines(bot: Bot):
     logger.info("Запуск задачи обновления дедлайнов всех пользователей...")
     users = await get_all_users()
     for user in users:
-        await update_user_deadlines_and_notify(bot, user.telegram_id)
+        # Сбой у одного пользователя (недоступный ЛК, битые учётные данные) не должен прерывать обновление для всех остальных
+        try:
+            await update_user_deadlines_and_notify(bot, user.telegram_id)
+        except Exception as e:
+            logger.exception(f"Ошибка при обновлении дедлайнов пользователя {user.telegram_id}: {e}")
         await asyncio.sleep(5)
     
     logger.success(f"Задача обновления дедлайнов для {len(users)} пользователей завершена")

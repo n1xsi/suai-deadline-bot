@@ -3,7 +3,12 @@ from aiogram import Bot
 
 import sys
 import asyncio
+import inspect
 import logging
+import traceback
+
+# Telegram не принимает сообщения длиннее 4096 символов
+MAX_MESSAGE_LENGTH = 4096
 
 
 class InterceptHandler(logging.Handler):
@@ -13,8 +18,9 @@ class InterceptHandler(logging.Handler):
         except ValueError:
             level = record.levelno
 
-        frame, depth = logging.currentframe(), 2
-        while frame and frame.f_code.co_filename == logging.__file__:
+        # Поиск кадра, из которого была вызвана запись в лог для вывода места ошибки
+        frame, depth = inspect.currentframe(), 0
+        while frame and (depth == 0 or frame.f_code.co_filename == logging.__file__):
             frame = frame.f_back
             depth += 1
 
@@ -44,6 +50,21 @@ class TelegramSink:
                 f"Function: {record['function']}\n"
                 f"Message: {record['message']}"
             )
+
+            exception = record["exception"]
+            if exception:
+                tb = "".join(traceback.format_exception(
+                    exception.type, exception.value, exception.traceback
+                )).strip()
+                available = MAX_MESSAGE_LENGTH - len(text) - len("\n\nTraceback:\n")
+                if available > 0: 
+                    if len(tb) > available:
+                        # "Хвост" traceback'а информативнее начала: там само исключение и место сбоя
+                        tb = "..." + tb[-(available - 3):]
+                    text += f"\n\nTraceback:\n{tb}"
+
+            text = text[:MAX_MESSAGE_LENGTH]
+
             try:
                 loop = asyncio.get_running_loop()
             except RuntimeError:
