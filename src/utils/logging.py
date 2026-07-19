@@ -2,6 +2,7 @@ from loguru import logger
 from aiogram import Bot
 
 import sys
+import time
 import asyncio
 import inspect
 import logging
@@ -9,6 +10,15 @@ import traceback
 
 # Telegram не принимает сообщения длиннее 4096 символов
 MAX_MESSAGE_LENGTH = 4096
+
+# Обрыв связи при long polling - обычная ситуация, поэтому единичный сбой не повод писать админу
+TRANSIENT_ERROR_MARKERS = ("Failed to fetch updates",)
+
+# Сколько подряд идущих сетевых сбоев считать уже не блипом, а реальной проблемой
+TRANSIENT_ALERT_THRESHOLD = 5
+
+# Если сетевых сбоев не было столько секунд - считаем, что связь восстановилась
+TRANSIENT_RESET_AFTER = 300
 
 
 class InterceptHandler(logging.Handler):
@@ -32,6 +42,29 @@ class TelegramSink:
         self.bot = bot
         self.chat_id = chat_id
         self._pending = set()
+        self._transient_count = 0
+        self._transient_last = 0.0
+
+    def _check_transient(self, message: str) -> tuple[bool, int]:
+        """
+        Отслеживает сетевые сбои long polling, о которых не нужно писать администратору.
+
+        :param message: Текст записи лога
+        :return: (пропустить ли отправку, число сбоев подряд); для обычных ошибок - (False, 0)
+        """
+        if not any(marker in message for marker in TRANSIENT_ERROR_MARKERS):
+            return False, 0
+
+        now = time.monotonic()
+        # Если с прошлого сбоя прошло много времени - связь успела восстановиться, счёт начинается заново
+        if now - self._transient_last > TRANSIENT_RESET_AFTER:
+            self._transient_count = 0
+        self._transient_last = now
+        self._transient_count += 1
+
+        # Уведомление уходит ровно на пороговом сбое: пока связь не восстановится, счётчик
+        # продолжает расти, поэтому на одну серию обрывов приходится одно сообщение
+        return self._transient_count != TRANSIENT_ALERT_THRESHOLD, self._transient_count
 
     async def _safe_send_log(self, text: str):
         try:
@@ -44,12 +77,24 @@ class TelegramSink:
     def __call__(self, message):
         record = message.record
         if record["level"].name in ("ERROR", "CRITICAL"):
+            skip, transient_count = self._check_transient(record["message"])
+            if skip:
+                return
+
             text = (
                 f"❗ {record['level'].name}\n"
                 f"File: {record['file'].name}:{record['line']}\n"
                 f"Function: {record['function']}\n"
                 f"Message: {record['message']}"
             )
+
+            # Порог сработал - сообщаем, что сбой не одиночный, а повторяется
+            if transient_count:
+                text += (
+                    f"\n\n⚠ Сбоев подряд: {transient_count}. Бот продолжает работу "
+                    f"и повторяет попытки; следующее уведомление придёт только после "
+                    f"восстановления связи и новой серии сбоев."
+                )
 
             exception = record["exception"]
             if exception:
