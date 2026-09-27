@@ -1,12 +1,13 @@
 from src.database.queries import (
     get_all_users, get_user_by_telegram_id, get_user_deadlines_from_db,
-    update_user_deadlines, cleanup_expired_trashed_deadlines
+    update_user_deadlines, cleanup_expired_trashed_deadlines, count_undated_deadlines
 )
 from src.parser.scraper import parse_lk_data
 from src.utils.crypto import decrypt_data
 
 from cryptography.fernet import InvalidToken
 from datetime import datetime
+from html import escape
 
 from loguru import logger
 from aiogram import Bot
@@ -61,24 +62,62 @@ async def update_user_deadlines_and_notify(bot: Bot, user_id: int, force_notify:
         logger.error(f"Не удалось обновить дедлайны для пользователя {user.telegram_id} (ошибка парсера)")
         return
 
-    newly_added = await update_user_deadlines(user.telegram_id, deadlines_from_parser)
+    sync_result = await update_user_deadlines(user.telegram_id, deadlines_from_parser)
 
-    if newly_added:
-        # Если список не пустой, значит появились новые дедлайны
-        logger.success(f"Найдено {len(newly_added)} новых дедлайнов для пользователя {user.telegram_id}")
+    new_dated = sync_result['new_dated']
+    new_undated = sync_result['new_undated']
+    got_lk_date = sync_result['got_lk_date']
 
-        new_deadlines_text = "✨ <b>Обнаружены новые дедлайны!</b>\n\n"
-        for d in newly_added:
-            new_deadlines_text += (
-                f"📚 <b>{d['course_name']}</b>\n"
-                f"📝 {d['task_name']}\n"
+    message_blocks = []
+
+    if new_dated:
+        block = "✨ <b>Обнаружены новые дедлайны!</b>\n\n"
+        for d in new_dated:
+            block += (
+                f"📚 <b>{escape(d['course_name'])}</b>\n"
+                f"📝 {escape(d['task_name'])}\n"
                 f"🗓️ Срок сдачи: {d['due_date'].strftime('%d.%m.%Y')}\n\n"
             )
+        message_blocks.append(block.rstrip())
 
+    if new_undated:
+        block = "❔ <b>Новые задания без указанного срока сдачи</b>\n\n"
+        for d in new_undated:
+            block += (
+                f"📚 <b>{escape(d['course_name'])}</b>\n"
+                f"📝 {escape(d['task_name'])}\n\n"
+            )
+        block += (
+            "<i>Назначить свой срок: «🚨 Посмотреть дедлайны» → «❔ Без срока сдачи».</i>"
+        )
+        message_blocks.append(block)
+
+    if got_lk_date:
+        block = "🗓️ <b>В ЛК появился официальный срок сдачи</b>\n\n"
+        for d in got_lk_date:
+            block += (
+                f"📚 <b>{escape(d['course_name'])}</b>\n"
+                f"📝 {escape(d['task_name'])}\n"
+            )
+            # Дата из ЛК считается источником истины и заменяет выставленную пользователем
+            if d['previous_user_date']:
+                block += (
+                    f"🔄 Ваш срок {d['previous_user_date'].strftime('%d.%m.%Y')} заменён на "
+                    f"<b>{d['due_date'].strftime('%d.%m.%Y')}</b>\n\n"
+                )
+            else:
+                block += f"🗓️ Срок сдачи: <b>{d['due_date'].strftime('%d.%m.%Y')}</b>\n\n"
+        message_blocks.append(block.rstrip())
+
+    if message_blocks:
+        logger.success(
+            f"Для пользователя {user.telegram_id} найдено: {len(new_dated)} новых дедлайнов, "
+            f"{len(new_undated)} без срока сдачи, {len(got_lk_date)} с появившейся датой из ЛК"
+        )
         try:
             await bot.send_message(
                 chat_id=user.telegram_id,
-                text=new_deadlines_text,
+                text="\n\n".join(message_blocks),
                 parse_mode="HTML"
             )
         except Exception as e:
@@ -110,6 +149,13 @@ async def update_all_deadlines(bot: Bot):
     logger.success(f"Задача обновления дедлайнов для {len(users)} пользователей завершена")
 
 
+def _undated_hint(undated_count: int) -> str:
+    """Приписка к напоминанию о том, что есть задания без указанного срока сдачи."""
+    if not undated_count:
+        return ""
+    return f"\n\n❔ Ещё <b>{undated_count}</b> заданий без указанного срока сдачи — можно назначить свой."
+
+
 async def send_deadline_notifications(bot: Bot):
     """
     Задача для отправки уведомлений о дедлайнах с учётом настроек пользователя.
@@ -123,7 +169,10 @@ async def send_deadline_notifications(bot: Bot):
     for user in users_to_notify:
         notification_sent_this_run = False
         user_deadlines = await get_user_deadlines_from_db(user.telegram_id)
-        if not user_deadlines:
+        undated_count = await count_undated_deadlines(user.telegram_id)
+
+        # Пропуск пользователя, только если напоминать вообще не о чем
+        if not user_deadlines and not undated_count:
             continue
 
         # Логика для ежедневных уведомлений
@@ -135,9 +184,10 @@ async def send_deadline_notifications(bot: Bot):
                 if days_left in notification_days_set:
                     text = (
                         f"🔔 <b>Напоминание о дедлайне!</b>\n\n"
-                        f"📚 <b>Предмет:</b> {deadline.course_name}\n"
-                        f"📝 <b>Задание:</b> {deadline.task_name}\n\n"
+                        f"📚 <b>Предмет:</b> {escape(deadline.course_name)}\n"
+                        f"📝 <b>Задание:</b> {escape(deadline.task_name)}\n\n"
                         f"🗓️ <u>Осталось дней</u>: <b>{days_left}</b>"
+                        f"{_undated_hint(undated_count)}"
                     )
                     try:
                         await bot.send_message(chat_id=user.telegram_id, text=text, parse_mode="HTML")
@@ -152,7 +202,13 @@ async def send_deadline_notifications(bot: Bot):
         if interval > 0 and current_hour % interval == 0 and not notification_sent_this_run:
             deadlines_text = "⏰ <b>Часовое напоминание!</b>\n\nВаши активные дедлайны:\n\n"
             for d in user_deadlines:
-                deadlines_text += f"▪️ {d.course_name}: {d.task_name} (до {d.due_date.strftime('%d.%m')})\n"
+                deadlines_text += (
+                    f"▪️ {escape(d.course_name)}: {escape(d.task_name)} "
+                    f"(до {d.due_date.strftime('%d.%m')})\n"
+                )
+            if not user_deadlines:
+                deadlines_text += "<i>нет дедлайнов с указанным сроком</i>\n"
+            deadlines_text += _undated_hint(undated_count)
             try:
                 await bot.send_message(chat_id=user.telegram_id, text=deadlines_text, parse_mode="HTML")
                 logger.success(f"Отправлено ЧАСТОЕ уведомление пользователю {user.telegram_id}")
