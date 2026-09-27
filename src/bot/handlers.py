@@ -334,7 +334,7 @@ async def show_profile(message: types.Message):
         profile_text += f"\n📌 из них <i>личных</i>: <b>{custom_count}</b>"
 
     if undated_count > 0:
-        profile_text += f"\n❓ Без срока сдачи: <b>{undated_count}</b>"
+        profile_text += f"\n❔ Без срока сдачи: <b>{undated_count}</b>"
 
     if trashed_count > 0:
         profile_text += f"\n🗑️ В корзине: <b>{trashed_count}</b>"

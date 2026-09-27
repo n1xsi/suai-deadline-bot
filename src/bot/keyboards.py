@@ -163,7 +163,6 @@ def get_pagination_keyboard(current_page: int, total_pages: int, undated_count: 
     Если есть дедлайны без указанного срока сдачи - внизу добавляется кнопка-вход на их страницу.
     """
     builder = InlineKeyboardBuilder()
-
     nav_buttons = []
 
     # Кнопка "Назад" не показывается, если это первая страница
