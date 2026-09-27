@@ -1,16 +1,17 @@
-from datetime import datetime
-from typing import Union
+from datetime import datetime, timedelta
+from typing import Optional, Tuple, Union
+from html import escape
 import asyncio
 
 from loguru import logger
 
-from aiogram.types import CallbackQuery, ReplyKeyboardRemove
+from aiogram.types import CallbackQuery, ReplyKeyboardRemove, LinkPreviewOptions
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram import Bot, Router, F, types
 
-from src.bot.states import Registration, AddDeadline, SetNotificationInterval
+from src.bot.states import Registration, AddDeadline, SetNotificationInterval, SetDeadlineDate
 from src.bot.filters import InStateFilter
 from src.database.queries import *
 from src.bot.keyboards import *
@@ -24,7 +25,33 @@ from src.scheduler.tasks import update_user_deadlines_and_notify
 # Хендлер - это функция, которая обрабатывает входящие сообщения и команды
 router = Router()
 
-PAGE_SIZE = 5  # Количество дедлайнов на одной странице
+# Количество дедлайнов на одной странице
+PAGE_SIZE = 5
+
+# Ссылки на задания в ЛК не должны разворачиваться в превью и раздувать сообщение
+NO_LINK_PREVIEW = LinkPreviewOptions(is_disabled=True)
+
+DATE_FORMAT_ERROR = "⛔️ Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:"
+DATE_PAST_ERROR = (
+    "⛔️ Нельзя назначить срок сдачи на уже <u>прошедшую</u> или <u>сегодняшнюю</u> дату.\n"
+    "Введите дату, начиная с завтрашнего дня:"
+)
+
+
+def _parse_future_date(text: str) -> Tuple[Optional[datetime], Optional[str]]:
+    """
+    Разбирает введённую пользователем дату сдачи в формате ДД.ММ.ГГГГ.
+    Возвращает (дата, None) при успехе или (None, текст ошибки) при неудаче.
+    """
+    try:
+        due_date = datetime.strptime((text or "").strip(), "%d.%m.%Y")
+    except ValueError:
+        return None, DATE_FORMAT_ERROR
+
+    if due_date.date() <= datetime.now().date():
+        return None, DATE_PAST_ERROR
+
+    return due_date, None
 
 
 @router.message(InStateFilter(), F.text.in_({"🚨 Посмотреть дедлайны", "🔔 Настройка напоминаний", "👤 Мой профиль", "🛠️ Настройка дедлайнов"}))
@@ -182,13 +209,41 @@ async def process_password(message: types.Message, state: FSMContext):
 
     if new_parsed_deadlines:
         await update_user_deadlines(message.from_user.id, new_parsed_deadlines)
-        deadlines_text = "\n\n".join(
-            [f"📚 <b>{d['subject']}</b>\n"
-             f"📝 <b>Задание:</b> {d['task']}\n"
-             f"🗓️ <b>Срок сдачи:</b> {d['due_date']}" for d in new_parsed_deadlines]
+
+        # Дедлайны без указанной в ЛК предельной даты выводятся отдельным блоком
+        dated = [d for d in new_parsed_deadlines if d['due_date']]
+        undated = [d for d in new_parsed_deadlines if not d['due_date']]
+
+        found_text = ""
+        if dated:
+            found_text += "\n\n".join(
+                [f"📚 <b>{escape(d['subject'])}</b>\n"
+                 f"📝 <b>Задание:</b> {escape(d['task'])}\n"
+                 f"🗓️ <b>Срок сдачи:</b> {d['due_date']}" for d in dated]
+            )
+
+        if undated:
+            if found_text:
+                found_text += "\n\n"
+            found_text += (
+                f"❔ <b>Без указанного срока сдачи ({len(undated)}):</b>\n\n"
+                + "\n\n".join(
+                    [f"📚 <b>{escape(d['subject'])}</b>\n"
+                     f"📝 <b>Задание:</b> {escape(d['task'])}" for d in undated]
+                )
+                + "\n\n<i>Срок для них можно назначить самому: «🚨 Посмотреть дедлайны» → "
+                  "«❔ Без срока сдачи».</i>"
+            )
+
+        await message.answer(
+            f"Вот, что я нашёл:\n\n{found_text}",
+            parse_mode="HTML",
+            link_preview_options=NO_LINK_PREVIEW
         )
-        await message.answer(f"Вот, что я нашёл:\n\n{deadlines_text}", parse_mode="HTML")
-        logger.info(f"Для пользователя {message.from_user.id} найдено {len(new_parsed_deadlines)} активных дедлайнов")
+        logger.info(
+            f"Для пользователя {message.from_user.id} найдено {len(new_parsed_deadlines)} активных дедлайнов "
+            f"({len(undated)} без срока сдачи)"
+        )
     else:
         await message.answer("На данный момент не найдено активных дедлайнов.")
         logger.info(f"Для пользователя {message.from_user.id} не найдено активных дедлайнов")
@@ -196,7 +251,6 @@ async def process_password(message: types.Message, state: FSMContext):
 # -------------------------------------------------------------------------------------------
 # Основные команды меню
 
-4
 def format_deadlines_page(deadlines: list, page: int, page_size: int = 5) -> str:
     """
     Формирует текст одной страницы со списком дедлайнов.
@@ -210,9 +264,10 @@ def format_deadlines_page(deadlines: list, page: int, page_size: int = 5) -> str
     deadlines_text = "⏳ <b>Ваши актуальные дедлайны:</b>\n\n"
     for i, d in enumerate(page_deadlines, start=start_index + 1):
         deadlines_text += (
-            f"{i}.📚 <b>{d.course_name}</b>\n"
-            f"   📝 <b>Задание:</b> {d.task_name}\n"
-            f"   🗓️ <b>Срок сдачи:</b> {d.due_date.strftime('%d.%m.%Y')}\n\n"
+            f"{i}.📚 <b>{escape(d.course_name)}</b>\n"
+            f"   📝 <b>Задание:</b> {escape(d.task_name)}\n"
+            f"   🗓️ <b>Срок сдачи:</b> {d.due_date.strftime('%d.%m.%Y')}"
+            f"{' <i>(ваш)</i>' if d.is_user_dated else ''}\n\n"
         )
     return deadlines_text
 
@@ -223,13 +278,15 @@ def format_deadlines_page(deadlines: list, page: int, page_size: int = 5) -> str
 async def show_deadlines(message: types.Message):
     """Показывает первую страницу со списком дедлайнов."""
     deadlines = await get_user_deadlines_from_db(message.from_user.id)
+    undated_count = await count_undated_deadlines(message.from_user.id)
+
     if not deadlines:
         await message.answer(
             "🕳 У вас пока нет предстоящих дедлайнов в базе.\n"
             "⏰ Обновление происходит автоматически <u>раз в час</u>.\n"
             "🧲 Вы можете обновить (синхронизировать) дедлайны в 'Настройке дедлайнов' или набрав команду '/update'.",
             parse_mode="HTML",
-            reply_markup=get_update_button(message.from_user.id),
+            reply_markup=get_update_button(message.from_user.id, undated_count=undated_count),
         )
         return
 
@@ -238,7 +295,7 @@ async def show_deadlines(message: types.Message):
 
     await message.answer(
         page_text,
-        reply_markup=get_pagination_keyboard(current_page=0, total_pages=total_pages),
+        reply_markup=get_pagination_keyboard(current_page=0, total_pages=total_pages, undated_count=undated_count),
         parse_mode="HTML"
     )
 
@@ -264,6 +321,7 @@ async def show_profile(message: types.Message):
 
     active_count = stats.get('active_deadlines', 0)
     custom_count = stats.get('custom_deadlines', 0)
+    undated_count = stats.get('undated_deadlines', 0)
     trashed_count = stats.get('trashed_deadlines', 0)
 
     profile_text = (
@@ -274,6 +332,9 @@ async def show_profile(message: types.Message):
 
     if custom_count > 0:
         profile_text += f"\n📌 из них <i>личных</i>: <b>{custom_count}</b>"
+
+    if undated_count > 0:
+        profile_text += f"\n❓ Без срока сдачи: <b>{undated_count}</b>"
 
     if trashed_count > 0:
         profile_text += f"\n🗑️ В корзине: <b>{trashed_count}</b>"
@@ -371,17 +432,24 @@ async def deadlines_page_callback(callback: CallbackQuery):
     page = int(callback.data.split("_")[1])
 
     deadlines = await get_user_deadlines_from_db(callback.from_user.id)
+    undated_count = await count_undated_deadlines(callback.from_user.id)
+
     if not deadlines:
-        await callback.message.edit_text("🕳 Дедлайнов больше нет.")
+        # Список пуст, но кнопка входа на страницу бездатных дедлайнов должна остаться
+        await callback.message.edit_text(
+            "🕳 Дедлайнов со сроком сдачи нет." if undated_count else "🕳 Дедлайнов больше нет.",
+            reply_markup=get_update_button(callback.from_user.id, undated_count=undated_count)
+        )
         await callback.answer()
         return
 
     total_pages = (len(deadlines) + PAGE_SIZE - 1) // PAGE_SIZE
+    page = max(0, min(page, total_pages - 1))  # Страница могла исчезнуть, пока сообщение висело в чате
     page_text = format_deadlines_page(deadlines, page=page, page_size=PAGE_SIZE)
 
     await callback.message.edit_text(
         page_text,
-        reply_markup=get_pagination_keyboard(current_page=page, total_pages=total_pages),
+        reply_markup=get_pagination_keyboard(current_page=page, total_pages=total_pages, undated_count=undated_count),
         parse_mode="HTML"
     )
     await callback.answer()
@@ -502,9 +570,9 @@ async def delete_deadline_confirm_callback(callback: CallbackQuery):
 
     text = (
         f"Вы уверены, что хотите удалить дедлайн?\n\n"
-        f"📚 <b>{deadline.course_name}</b>\n"
-        f"📝 {deadline.task_name}\n"
-        f"🗓️ {deadline.due_date.strftime('%d.%m.%Y')}"
+        f"📚 <b>{escape(deadline.course_name)}</b>\n"
+        f"📝 {escape(deadline.task_name)}\n"
+        f"🗓️ {deadline.due_date.strftime('%d.%m.%Y') if deadline.due_date else 'срок не указан'}"
     )
 
     await callback.message.edit_text(
@@ -693,6 +761,192 @@ async def back_to_settings_callback(callback: CallbackQuery):
     logger.info(f"Пользователь {callback.from_user.id} вернулся в настройки дедлайнов")
 
 # -------------------------------------------------------------------------------------------
+# Дедлайны без указанного в ЛК срока сдачи
+
+def format_undated_page(deadlines: list, page: int, page_size: int = 5) -> str:
+    """
+    Формирует текст одной страницы со списком дедлайнов без срока сдачи.
+    Функция предполагает, что список `deadlines` не пустой.
+    """
+    start_index = page * page_size
+    end_index = start_index + page_size
+
+    page_deadlines = deadlines[start_index:end_index]
+
+    text = (
+        "❔ <b>Дедлайны без срока сдачи</b>\n\n"
+        "В личном кабинете у этих заданий <u>не указана</u> предельная дата.\n"
+        "🗓️ Назначьте свой срок — задание переедет в основной список и попадёт в напоминания.\n\n"
+    )
+
+    for i, d in enumerate(page_deadlines, start=start_index + 1):
+        # Названия из ЛК экранируются: символы < и & сломали бы разметку сообщения
+        task_name = escape(d.task_name)
+
+        # Название задания - ссылка на него в ЛК (у записей, созданных до миграции, ссылки нет)
+        task_line = f'<a href="{escape(d.task_url)}">{task_name}</a>' if d.task_url else task_name
+
+        text += (
+            f"{i}.📚 <b>{escape(d.course_name)}</b>\n"
+            f"   📝 <b>Задание:</b> {task_line}\n"
+            f"   🗓️ <b>Срок сдачи:</b> <i>не указан</i>\n\n"
+        )
+    return text
+
+
+async def build_undated_view(user_id: int, page: int = 0) -> Tuple[str, object]:
+    """
+    Собирает текст и клавиатуру страницы дедлайнов без срока сдачи.
+    Вынесено отдельно, т.к. страницу нужно и перерисовывать (edit_text из callback'а),
+    и отправлять новым сообщением (после ввода даты пользователем).
+    """
+    deadlines = await get_undated_deadlines_from_db(user_id)
+
+    if not deadlines:
+        return (
+            "✅ Дедлайнов без срока сдачи не осталось.\n"
+            "Все задания из личного кабинета имеют дату и находятся в основном списке.",
+            get_back_to_deadlines_keyboard()
+        )
+
+    total_pages = (len(deadlines) + PAGE_SIZE - 1) // PAGE_SIZE
+    page = max(0, min(page, total_pages - 1))  # Список мог сократиться, пока сообщение висело в чате
+
+    return (
+        format_undated_page(deadlines, page=page, page_size=PAGE_SIZE),
+        get_undated_deadlines_keyboard(deadlines, current_page=page, page_size=PAGE_SIZE)
+    )
+
+
+async def show_undated_page(callback: CallbackQuery, page: int = 0):
+    """Перерисовывает текущее сообщение страницей дедлайнов без срока сдачи."""
+    text, markup = await build_undated_view(callback.from_user.id, page)
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=markup,
+            parse_mode="HTML",
+            link_preview_options=NO_LINK_PREVIEW
+        )
+    except TelegramBadRequest as e:
+        # Нажатие на кнопку текущей страницы не должно валить хендлер
+        if "message is not modified" not in str(e):
+            raise
+
+
+async def send_undated_page(message: types.Message, page: int = 0):
+    """Отправляет страницу дедлайнов без срока сдачи новым сообщением."""
+    text, markup = await build_undated_view(message.from_user.id, page)
+    await message.answer(
+        text,
+        reply_markup=markup,
+        parse_mode="HTML",
+        link_preview_options=NO_LINK_PREVIEW
+    )
+
+
+@router.callback_query(F.data.startswith("undated_page_"))
+async def undated_page_callback(callback: CallbackQuery):
+    """Хендлер, открывающий страницу дедлайнов без срока сдачи и переключающий её страницы."""
+    page = int(callback.data.split("_")[2])
+    await show_undated_page(callback, page=page)
+    await callback.answer()
+    logger.info(f"Пользователь {callback.from_user.id} смотрит дедлайны без срока сдачи (страница {page})")
+
+
+@router.callback_query(F.data.startswith("undated_trash_"))
+async def undated_trash_callback(callback: CallbackQuery):
+    """
+    Убирает дедлайн без срока сдачи в корзину.
+    Подтверждение не запрашивается: действие обратимо через корзину.
+    """
+    _, _, deadline_id, page = callback.data.split("_")
+    await move_deadline_to_trash(int(deadline_id))
+
+    await show_undated_page(callback, page=int(page))
+    await callback.answer("🚮 Дедлайн перемещён в корзину!")
+    logger.info(f"Пользователь {callback.from_user.id} убрал в корзину дедлайн без срока сдачи")
+
+# -------------------------------------------------------------------------------------------
+# FSM для назначения собственного срока сдачи дедлайну без даты
+
+@router.callback_query(F.data.startswith("setdate_"))
+async def set_deadline_date_start(callback: CallbackQuery, state: FSMContext):
+    """Запрашивает у пользователя дату сдачи для дедлайна, у которого её нет в ЛК."""
+    _, deadline_id, page = callback.data.split("_")
+
+    deadline = await get_deadline_by_id(int(deadline_id))
+    if not deadline:
+        await callback.answer("⛔ Этого дедлайна больше нет!", show_alert=True)
+        await show_undated_page(callback, page=int(page))
+        return
+
+    if deadline.due_date:
+        await callback.answer("❗ У этого задания уже появился срок сдачи из ЛК.", show_alert=True)
+        await show_undated_page(callback, page=int(page))
+        return
+
+    await state.set_state(SetDeadlineDate.waiting_for_date)
+    await state.update_data(deadline_id=int(deadline_id), page=int(page))
+
+    tomorrow_date = datetime.now() + timedelta(days=1)
+    date_example = tomorrow_date.strftime("%d.%m.%Y")
+
+    await callback.message.edit_text(
+        f"📚 <b>{escape(deadline.course_name)}</b>\n"
+        f"📝 {escape(deadline.task_name)}\n\n"
+        f"✍ Введите <b>свой</b> срок сдачи в формате ДД.ММ.ГГГГ (например, {date_example}):",
+        reply_markup=get_cancel_setdate_keyboard(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+    logger.info(f"Пользователь {callback.from_user.id} назначает срок сдачи дедлайну id={deadline_id}")
+
+
+@router.callback_query(F.data == "cancel_setdate")
+async def set_deadline_date_cancel(callback: CallbackQuery, state: FSMContext):
+    """
+    Отменяет ввод срока сдачи и возвращает на страницу дедлайнов без даты.
+    Фильтр по состоянию не ставится: FSM хранится в памяти и теряется
+    при перезапуске бота, а кнопка в старом сообщении должна продолжать работать.
+    """
+    user_data = await state.get_data()
+    await state.clear()
+
+    await show_undated_page(callback, page=user_data.get("page", 0))
+    await callback.answer("❕ Назначение срока отменено.")
+    logger.info(f"Пользователь {callback.from_user.id} отменил назначение срока сдачи")
+
+
+@router.message(SetDeadlineDate.waiting_for_date, F.text)
+async def set_deadline_date_finish(message: types.Message, state: FSMContext):
+    """Принимает дату и назначает её дедлайну."""
+    due_date, error = _parse_future_date(message.text)
+    if error:
+        await message.answer(error, parse_mode="HTML")
+        return  # Ожидание нового ввода при том же состоянии
+
+    user_data = await state.get_data()
+    deadline_id = user_data.get("deadline_id")
+    await state.clear()
+
+    if not await set_deadline_due_date(deadline_id, due_date):
+        await message.answer(
+            "❕ Не удалось назначить срок: дедлайн уже удалён "
+            "или у него успела появиться официальная дата из ЛК."
+        )
+    else:
+        await message.answer(
+            f"✅ Срок сдачи <b>{due_date.strftime('%d.%m.%Y')}</b> назначен!\n"
+            "Дедлайн переехал в основной список и теперь участвует в напоминаниях.",
+            parse_mode="HTML"
+        )
+        logger.info(f"Пользователь {message.from_user.id} назначил срок сдачи дедлайну id={deadline_id}")
+
+    # Список сократился - возврат на первую страницу
+    await send_undated_page(message, page=0)
+
+# -------------------------------------------------------------------------------------------
 # FSM для настройки интервала уведомлений
 
 @router.callback_query(F.data == "set_interval")
@@ -778,16 +1032,10 @@ async def add_deadline_task(message: types.Message, state: FSMContext):
 
 @router.message(AddDeadline.waiting_for_due_date, F.text)
 async def add_deadline_date(message: types.Message, state: FSMContext):
-    try:
-        due_date = datetime.strptime(message.text, "%d.%m.%Y")
-
-        if due_date.date() <= datetime.now().date():
-            await message.answer("⛔️ Нельзя добавить дедлайн на уже <u>прошедшую</u> или <u>сегодняшнюю</u> дату.\n"
-                                 "Введите дату, начиная с завтрашнего дня:", parse_mode="HTML")
-            return  # Ожидание нового ввода при том же состоянии
-    except ValueError:
-        await message.answer("⛔️ Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:")
-        return
+    due_date, error = _parse_future_date(message.text)
+    if error:
+        await message.answer(error, parse_mode="HTML")
+        return  # Ожидание нового ввода при том же состоянии
 
     user_data = await state.get_data()
     await add_custom_deadline(
