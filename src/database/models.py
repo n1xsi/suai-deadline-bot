@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import Integer, BigInteger, String, Boolean, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -35,7 +36,13 @@ class Deadline(Base):
     user_id: Mapped[int] = mapped_column(nullable=False)
     course_name: Mapped[str] = mapped_column(String(100), nullable=False)
     task_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    due_date: Mapped[datetime] = mapped_column(nullable=False)
+
+    # None означает, что в ЛК у задания не указана предельная дата
+    due_date: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+
+    task_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
     is_custom: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false')
     is_trashed: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false')
+
+    is_user_dated: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false')

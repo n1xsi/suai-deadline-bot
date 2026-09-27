@@ -12,5 +12,9 @@ class AddDeadline(StatesGroup):
     waiting_for_due_date = State()
 
 
+class SetDeadlineDate(StatesGroup):
+    waiting_for_date = State()
+
+
 class SetNotificationInterval(StatesGroup):
     waiting_for_hours = State()
