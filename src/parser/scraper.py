@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, datetime
+from urllib.parse import urljoin
 import requests
 import re
 
@@ -7,6 +8,8 @@ from loguru import logger
 from typing import List, Dict, Optional, Tuple
 
 BASE_URL = "https://pro.guap.ru"
+
+DUE_DATE_FORMAT = "%d.%m.%Y"
 
 
 def _get_current_semester_id() -> Tuple[int, str]:
@@ -117,11 +120,34 @@ def _extract_profile_id(session: requests.Session, full_name: str) -> Optional[s
         return None
 
 
-def _extract_deadlines(session: requests.Session) -> Optional[List[Dict[str, str]]]:
-    """Парсит страницу с заданиями и возвращает список дедлайнов."""
+def _parse_due_date_cell(text: Optional[str]) -> Optional[str]:
+    """
+    Разбирает содержимое ячейки "Предельная дата".
+    Возвращает дату в формате ДД.ММ.ГГГГ или None, если срок сдачи не указан.
+
+    Текст сверяется с форматом даты, а не с конкретной фразой: ЛК может отдать
+    "Не указана", пустую ячейку, прочерк или что-то ещё - всё это значит "срока нет".
+    """
+    text = (text or "").strip()
+    if not text:
+        return None
+
     try:
-        current_semester_id, _ = _get_current_semester_id() # Требуется только ID, название игнорируется
-        print(f"Текущий семестр ID: {current_semester_id}")
+        datetime.strptime(text, DUE_DATE_FORMAT)
+    except ValueError:
+        return None
+
+    return text
+
+
+def _extract_deadlines(session: requests.Session) -> Optional[List[Dict[str, Optional[str]]]]:
+    """
+    Парсит страницу с заданиями и возвращает список дедлайнов.
+    У дедлайнов без указанного в ЛК срока сдачи ключ 'due_date' равен None.
+    """
+    try:
+        current_semester_id, _ = _get_current_semester_id()  # Требуется только ID, название игнорируется
+        logger.debug(f"Текущий семестр ID: {current_semester_id}")
 
         tasks_url = f"{BASE_URL}/inside/student/tasks/?semester={current_semester_id}&subject=0&type=0&showStatus=1&perPage=200"
         response = session.get(tasks_url)
@@ -151,21 +177,26 @@ def _extract_deadlines(session: requests.Session) -> Optional[List[Dict[str, str
                 continue
             task = task_tag.get_text(strip=True)
 
-            # Колонка 8: "Предельная дата"
-            date_text = cols[7].get_text(strip=True)  # Поиск текста внутри 8-й ячейки (индекс 7)
+            # Ссылка на само задание в ЛК (нужна для дедлайнов без указанного срока)
+            task_href = task_tag.get('href')
+            task_url = urljoin(BASE_URL, task_href) if task_href else None
 
-            # Если дата = "Не указана" или пустая - пропуск этого "дедлайна"
-            if not date_text or date_text == "Не указана":
-                continue
+            # Колонка 8: "Предельная дата" (может быть не заполнена)
+            due_date = _parse_due_date_cell(cols[7].get_text(strip=True))
 
-            # Если есть дата - добавляем дедлайн в список
+            # Дедлайны без срока сдачи тоже попадают в список - с due_date=None
             deadlines.append({
                 'subject': subject,
                 'task': task,
-                'due_date': date_text
+                'due_date': due_date,
+                'url': task_url
             })
 
-        logger.success(f"Парсер нашел {len(deadlines)} дедлайнов")
+        undated_count = sum(1 for d in deadlines if not d['due_date'])
+        logger.success(
+            f"Парсер нашел {len(deadlines)} дедлайнов "
+            f"(из них {undated_count} без указанного срока сдачи)"
+        )
         return deadlines
     except requests.RequestException as e:
         logger.error(f"Сетевая ошибка при парсинге дедлайнов: {e}")
@@ -200,6 +231,10 @@ def parse_lk_data(username: str, password: str) -> Optional[Tuple[List[Dict], Op
         logger.error(f"Не удалось парсить дедлайны пользователя {username}")
         deadlines = []
 
-    logger.success(f"Найдена публичная информация о пользователе {username}: ID={profile_id}, ФИО='{full_name}', Дедлайнов={len(deadlines)}")
+    undated_count = sum(1 for d in deadlines if not d['due_date'])
+    logger.success(
+        f"Найдена публичная информация о пользователе {username}: ID={profile_id}, ФИО='{full_name}', "
+        f"Дедлайнов={len(deadlines)} (без срока сдачи={undated_count})"
+    )
 
     return deadlines, profile_id, full_name
