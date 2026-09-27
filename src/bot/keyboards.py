@@ -1,7 +1,12 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from src.database.models import User
+from src.database.models import User, Deadline
+
+
+def _short_date(deadline: Deadline) -> str:
+    """Короткая подпись срока сдачи для текста кнопки (у дедлайна его может не быть)."""
+    return deadline.due_date.strftime('%d.%m') if deadline.due_date else "без срока"
 
 
 def get_main_menu_keyboard():
@@ -75,7 +80,7 @@ def get_deadlines_settings_keyboard(deadlines: list, current_page: int, page_siz
     # Создание кнопок для удаления дедлайнов
     for deadline in page_deadlines:
         builder.button(
-            text=f"❌ {deadline.course_name[:20]}... ({deadline.due_date.strftime('%d.%m')})",
+            text=f"❌ {deadline.course_name[:20]}... ({_short_date(deadline)})",
             callback_data=f"del_deadline_{deadline.id}"
         )
 
@@ -144,34 +149,122 @@ def get_notification_settings_keyboard(user: User):
     return builder.as_markup()
 
 
-def get_pagination_keyboard(current_page: int, total_pages: int):
+def get_undated_button(undated_count: int) -> InlineKeyboardButton:
+    """Кнопка-вход на страницу дедлайнов без указанного срока сдачи."""
+    return InlineKeyboardButton(
+        text=f"❔ Без срока сдачи ({undated_count})",
+        callback_data="undated_page_0"
+    )
+
+
+def get_pagination_keyboard(current_page: int, total_pages: int, undated_count: int = 0):
     """
     Создаёт клавиатуру для пагинации (Вперёд/Назад).
+    Если есть дедлайны без указанного срока сдачи - внизу добавляется кнопка-вход на их страницу.
     """
     builder = InlineKeyboardBuilder()
+
+    nav_buttons = []
 
     # Кнопка "Назад" не показывается, если это первая страница
     if current_page > 0:
-        builder.button(text="⬅️ Назад", callback_data=f"page_{current_page - 1}")
+        nav_buttons.append(
+            InlineKeyboardButton(text="⬅️ Назад", callback_data=f"page_{current_page - 1}")
+        )
 
     # Индикатор страницы ('ignore' - чтобы нажатие на кнопку не делало ничего)
-    builder.button(text=f"📄 {current_page + 1} / {total_pages}", callback_data="ignore")
+    nav_buttons.append(
+        InlineKeyboardButton(text=f"📄 {current_page + 1} / {total_pages}", callback_data="ignore")
+    )
 
     # Кнопка "Вперёд" не показывается, если это последняя страница
     if current_page < total_pages - 1:
-        builder.button(text="Вперёд ➡️", callback_data=f"page_{current_page + 1}")
+        nav_buttons.append(
+            InlineKeyboardButton(text="Вперёд ➡️", callback_data=f"page_{current_page + 1}")
+        )
 
-    # Расположение кнопок в один ряд
-    builder.adjust(3)
+    # Ряды добавляются явно: builder.adjust() переформатировал бы все кнопки сразу
+    builder.row(*nav_buttons)
+
+    if undated_count > 0:
+        builder.row(get_undated_button(undated_count))
+
     return builder.as_markup()
 
 
-def get_update_button(user_id: int):
+def get_undated_deadlines_keyboard(deadlines: list, current_page: int, page_size: int):
     """
-    Создаёт кнопку для обновления дедлайнов.
+    Создаёт пагинированную клавиатуру для страницы дедлайнов без срока сдачи.
+    На каждый дедлайн - ряд из двух кнопок: назначить срок и убрать в корзину.
+    Номера кнопок совпадают с нумерацией дедлайнов в тексте сообщения.
     """
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔄 Обновить", callback_data=f"update_{user_id}")
+
+    total_pages = (len(deadlines) + page_size - 1) // page_size
+
+    start_index = current_page * page_size
+    end_index = start_index + page_size
+    page_deadlines = deadlines[start_index:end_index]
+
+    for number, deadline in enumerate(page_deadlines, start=start_index + 1):
+        builder.row(
+            InlineKeyboardButton(
+                text=f"🗓️ {number}. {deadline.course_name[:18]}...",
+                callback_data=f"setdate_{deadline.id}_{current_page}"
+            ),
+            InlineKeyboardButton(
+                text=f"🗑️ {number}",
+                callback_data=f"undated_trash_{deadline.id}_{current_page}"
+            )
+        )
+
+    pagination_buttons = []
+    if current_page > 0:
+        pagination_buttons.append(
+            InlineKeyboardButton(text="⬅️", callback_data=f"undated_page_{current_page - 1}")
+        )
+    if total_pages > 1:
+        pagination_buttons.append(
+            InlineKeyboardButton(text=f"📄 {current_page + 1}/{total_pages}", callback_data="ignore")
+        )
+    if current_page < total_pages - 1:
+        pagination_buttons.append(
+            InlineKeyboardButton(text="➡️", callback_data=f"undated_page_{current_page + 1}")
+        )
+
+    if pagination_buttons:
+        builder.row(*pagination_buttons)
+
+    builder.row(InlineKeyboardButton(text="⬅️ К списку дедлайнов", callback_data="page_0"))
+    return builder.as_markup()
+
+
+def get_cancel_setdate_keyboard():
+    """Inline-кнопка отмены ввода собственного срока сдачи."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="❌ Отмена", callback_data="cancel_setdate")
+    return builder.as_markup()
+
+
+def get_back_to_deadlines_keyboard():
+    """Кнопка возврата к основному списку дедлайнов (со страницы без срока сдачи)."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅️ К списку дедлайнов", callback_data="page_0")
+    return builder.as_markup()
+
+
+def get_update_button(user_id: int, undated_count: int = 0):
+    """
+    Создаёт кнопку для обновления дедлайнов.
+    Если есть дедлайны без срока сдачи - рядом появляется кнопка-вход на их страницу,
+    иначе она была бы недостижима при пустом списке актуальных дедлайнов.
+    """
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🔄 Обновить", callback_data=f"update_{user_id}"))
+
+    if undated_count > 0:
+        builder.row(get_undated_button(undated_count))
+
     return builder.as_markup()
 
 
@@ -187,7 +280,7 @@ def get_trash_bin_keyboard(deadlines: list, current_page: int, page_size: int):
     # Кнопки для восстановления
     for deadline in page_deadlines:
         builder.button(
-            text=f"♻️ {deadline.course_name[:20]}... ({deadline.due_date.strftime('%d.%m')})",
+            text=f"♻️ {deadline.course_name[:20]}... ({_short_date(deadline)})",
             callback_data=f"restore_{deadline.id}"
         )
 
