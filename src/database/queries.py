@@ -76,19 +76,29 @@ async def get_user_by_telegram_id(telegram_id: int):
         return result.scalars().first()
 
 
-async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dict]) -> List[Dict]:
+async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dict]) -> Dict[str, List[Dict]]:
     """
     "Умно" синхронизирует дедлайны из парсера с базой данных:
     1) Не трогает личные дедлайны (добавленные вручную)
     2) Не добавляет дедлайны, которые занесены в корзину
     3) Обновляет дату, если срок сдачи дедлайна изменился
+    4) Сохраняет дедлайны без указанного в ЛК срока сдачи (due_date = None)
+    5) Не затирает срок, выставленный пользователем, пока в ЛК нет официальной даты
 
-    Возвращает список словарей с данными о вновь добавленных дедлайнах.
+    Возвращает словарь с тремя списками:
+      'new_dated'   - новые дедлайны с указанным сроком сдачи
+      'new_undated' - новые дедлайны без срока сдачи
+      'got_lk_date' - дедлайны, у которых в ЛК появилась официальная дата
+                      (ключ 'previous_user_date' - дата, ранее выставленная пользователем, или None)
     """
+    new_dated: List[Dict] = []
+    new_undated: List[Dict] = []
+    got_lk_date: List[Dict] = []
+
     async with async_session_factory() as session:
         user = await get_user_by_telegram_id(telegram_id)
         if not user:
-            return []
+            return {'new_dated': new_dated, 'new_undated': new_undated, 'got_lk_date': got_lk_date}
 
         # Получение ВСЕХ парсерных дедлайнов (и активных, и из корзины)
         existing_deadlines_query = await session.execute(
@@ -114,22 +124,35 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
             await session.execute(delete(Deadline).where(Deadline.id.in_(to_delete_ids)))
 
         # Поиск и создание дедлайнов, которые нужно добавить
-        newly_added_deadlines_data = []
         objects_to_add_in_db = []
 
         for key, data in parsed_deadlines_set.items():
-            try:
-                due_date_obj = datetime.strptime(data['due_date'], "%d.%m.%Y")
-            except ValueError:
-                continue
+            raw_due_date = data.get('due_date')
+            task_url = data.get('url')
+
+            # due_date = None означает, что в ЛК у задания не указана предельная дата
+            if raw_due_date:
+                try:
+                    due_date_obj = datetime.strptime(raw_due_date, "%d.%m.%Y")
+                except ValueError:
+                    logger.warning(f"Не удалось разобрать дату '{raw_due_date}' для задания '{data['task']}'")
+                    due_date_obj = None
+            else:
+                due_date_obj = None
 
             # Новый дедлайн, которого нет в БД
             if key not in existing_deadlines_set:
-                newly_added_deadlines_data.append({
+                deadline_data = {
                     'course_name': data['subject'],
                     'task_name': data['task'],
-                    'due_date': due_date_obj
-                })
+                    'due_date': due_date_obj,
+                    'task_url': task_url
+                }
+
+                if due_date_obj:
+                    new_dated.append(deadline_data)
+                else:
+                    new_undated.append(deadline_data)
 
                 objects_to_add_in_db.append(
                     Deadline(
@@ -137,18 +160,36 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
                         course_name=data['subject'],
                         task_name=data['task'],
                         due_date=due_date_obj,
+                        task_url=task_url,
                         is_custom=False
                     )
                 )
 
             # Дедлайн уже есть в БД
             else:
-                # Проверка, изменилась ли дата сдачи на сайте
                 existing_dl = existing_deadlines_set[key]
 
-                # Сравнивание дат
-                if existing_dl.due_date.date() != due_date_obj.date():
+                # Дозапись ссылки на задание (бэкфилл записей, созданных до появления поля)
+                if task_url and existing_dl.task_url != task_url:
+                    existing_dl.task_url = task_url
+
+                # В ЛК срока сдачи нет: не затираем ни NULL, ни дату, выставленную пользователем
+                if due_date_obj is None:
+                    continue
+
+                # Проверка, изменилась ли дата сдачи на сайте
+                if existing_dl.due_date is None or existing_dl.due_date.date() != due_date_obj.date():
+                    # Дата из ЛК считается источником истины и перезаписывает пользовательскую
+                    if existing_dl.due_date is None or existing_dl.is_user_dated:
+                        got_lk_date.append({
+                            'course_name': existing_dl.course_name,
+                            'task_name': existing_dl.task_name,
+                            'due_date': due_date_obj,
+                            'previous_user_date': existing_dl.due_date if existing_dl.is_user_dated else None
+                        })
+
                     existing_dl.due_date = due_date_obj
+                    existing_dl.is_user_dated = False
 
 
         if objects_to_add_in_db:
@@ -156,9 +197,12 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
 
         await session.commit()
         if objects_to_add_in_db:
-            logger.success(f'Добавлено {len(objects_to_add_in_db)} дедлайнов')
+            logger.success(
+                f'Добавлено {len(objects_to_add_in_db)} дедлайнов '
+                f'({len(new_undated)} из них без срока сдачи)'
+            )
 
-        return newly_added_deadlines_data
+        return {'new_dated': new_dated, 'new_undated': new_undated, 'got_lk_date': got_lk_date}
 
 
 async def get_users_with_upcoming_deadlines(days: int):
@@ -205,6 +249,14 @@ async def get_user_stats(telegram_id: int) -> dict:
         )
         custom_active_count = await session.execute(custom_active_query)
 
+        # Подсчёт дедлайнов без указанного в ЛК срока сдачи
+        undated_query = select(func.count(Deadline.id)).where(
+            Deadline.user_id == user.id,
+            Deadline.due_date.is_(None),
+            Deadline.is_trashed == False
+        )
+        undated_count_result = await session.execute(undated_query)
+
         # Подсчёт дедлайнов в корзине
         trashed_query = select(func.count(Deadline.id)).where(
             Deadline.user_id == user.id,
@@ -214,13 +266,18 @@ async def get_user_stats(telegram_id: int) -> dict:
 
         active_count = all_active_count.scalar_one_or_none() or 0
         custom_count = custom_active_count.scalar_one_or_none() or 0
+        undated_count = undated_count_result.scalar_one_or_none() or 0
         trashed_count = trashed_active_count.scalar_one_or_none() or 0
 
-        logger.success(f'Статистика пользователя {telegram_id}: {active_count} активных дедлайнов, {custom_count} личных, {trashed_count} в корзине')
+        logger.success(
+            f'Статистика пользователя {telegram_id}: {active_count} активных дедлайнов, '
+            f'{custom_count} личных, {undated_count} без срока сдачи, {trashed_count} в корзине'
+        )
 
         return {
             "active_deadlines": active_count,
             "custom_deadlines": custom_count,
+            "undated_deadlines": undated_count,
             "trashed_deadlines": trashed_count
         }
 
@@ -245,7 +302,11 @@ async def delete_user_data(telegram_id: int) -> bool:
 
 
 async def get_user_deadlines_from_db(telegram_id: int) -> list[Deadline]:
-    """Получает все актуальные дедлайны пользователя из БД."""
+    """
+    Получает все актуальные дедлайны пользователя из БД.
+    Дедлайны без указанного срока сдачи сюда НЕ попадают - для них есть
+    get_undated_deadlines_from_db().
+    """
     async with async_session_factory() as session:
         user = await get_user_by_telegram_id(telegram_id)
         if not user:
@@ -257,6 +318,7 @@ async def get_user_deadlines_from_db(telegram_id: int) -> list[Deadline]:
             select(Deadline)
             .where(
                 Deadline.user_id == user.id,
+                Deadline.due_date.is_not(None),
                 Deadline.due_date >= datetime.now().date(),
                 Deadline.is_trashed == False
                 )
@@ -266,6 +328,73 @@ async def get_user_deadlines_from_db(telegram_id: int) -> list[Deadline]:
         deadlines = result.scalars().all()
         logger.success(f'Пользователь с telegram_id={telegram_id} имеет {len(deadlines)} дедлайнов')
         return list(deadlines)
+
+
+async def get_undated_deadlines_from_db(telegram_id: int) -> list[Deadline]:
+    """Получает дедлайны пользователя, у которых в ЛК не указан срок сдачи."""
+    async with async_session_factory() as session:
+        user = await get_user_by_telegram_id(telegram_id)
+        if not user:
+            logger.error(
+                f'Не удалось получить дедлайны без срока сдачи для telegram_id={telegram_id}, '
+                f'пользователя не существует'
+            )
+            return []
+
+        query = (
+            select(Deadline)
+            .where(
+                Deadline.user_id == user.id,
+                Deadline.due_date.is_(None),
+                Deadline.is_trashed == False
+            )
+            .order_by(Deadline.course_name.asc(), Deadline.task_name.asc())
+        )
+        result = await session.execute(query)
+        deadlines = result.scalars().all()
+        logger.success(f'Пользователь с telegram_id={telegram_id} имеет {len(deadlines)} дедлайнов без срока сдачи')
+        return list(deadlines)
+
+
+async def count_undated_deadlines(telegram_id: int) -> int:
+    """Считает дедлайны пользователя без указанного срока сдачи (для счётчика на кнопке)."""
+    async with async_session_factory() as session:
+        user = await get_user_by_telegram_id(telegram_id)
+        if not user:
+            return 0
+
+        query = select(func.count(Deadline.id)).where(
+            Deadline.user_id == user.id,
+            Deadline.due_date.is_(None),
+            Deadline.is_trashed == False
+        )
+        result = await session.execute(query)
+        return result.scalar_one_or_none() or 0
+
+
+async def set_deadline_due_date(deadline_id: int, due_date: datetime) -> bool:
+    """
+    Назначает дедлайну срок сдачи, выставленный самим пользователем.
+
+    Обновление срабатывает только если у дедлайна срока ещё нет: пока пользователь набирал
+    дату, синхронизация могла подтянуть официальную дату из ЛК - её перезаписывать нельзя.
+    Возвращает True, если дата была назначена.
+    """
+    async with async_session_factory() as session:
+        query = (
+            update(Deadline)
+            .where(Deadline.id == deadline_id, Deadline.due_date.is_(None))
+            .values(due_date=due_date, is_user_dated=True)
+        )
+        result = await session.execute(query)
+        await session.commit()
+
+        if result.rowcount:
+            logger.success(f'Дедлайну с id={deadline_id} назначен срок сдачи {due_date.strftime("%d.%m.%Y")}')
+            return True
+
+        logger.warning(f'Не удалось назначить срок сдачи дедлайну с id={deadline_id} (срок уже есть или дедлайн удалён)')
+        return False
 
 
 async def add_custom_deadline(telegram_id: int, course: str, task: str, due_date: datetime):
@@ -423,10 +552,14 @@ async def empty_trash_for_user(telegram_id: int):
 
 
 async def cleanup_expired_trashed_deadlines():
-    """Автоматически удаляет просроченные дедлайны из корзин всех пользователей."""
+    """
+    Автоматически удаляет просроченные дедлайны из корзин всех пользователей.
+    Дедлайны без срока сдачи не трогаются: у них нечему истекать.
+    """
     async with async_session_factory() as session:
         query = delete(Deadline).where(
             Deadline.is_trashed == True,
+            Deadline.due_date.is_not(None),
             Deadline.due_date < datetime.now().date()
         )
         result = await session.execute(query)
