@@ -5,7 +5,7 @@ import asyncio
 
 from loguru import logger
 
-from aiogram.types import CallbackQuery, ReplyKeyboardRemove, LinkPreviewOptions
+from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
@@ -15,6 +15,8 @@ from src.bot.states import Registration, AddDeadline, SetNotificationInterval, S
 from src.bot.filters import InStateFilter
 from src.database.queries import *
 from src.bot.keyboards import *
+
+from src.utils.formatting import task_link, NO_LINK_PREVIEW
 
 from src.parser.scraper import parse_lk_data, _get_current_semester_id
 
@@ -27,9 +29,6 @@ router = Router()
 
 # Количество дедлайнов на одной странице
 PAGE_SIZE = 5
-
-# Ссылки на задания в ЛК не должны разворачиваться в превью и раздувать сообщение
-NO_LINK_PREVIEW = LinkPreviewOptions(is_disabled=True)
 
 DATE_FORMAT_ERROR = "⛔️ Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:"
 DATE_PAST_ERROR = (
@@ -218,7 +217,7 @@ async def process_password(message: types.Message, state: FSMContext):
         if dated:
             found_text += "\n\n".join(
                 [f"📚 <b>{escape(d['subject'])}</b>\n"
-                 f"📝 <b>Задание:</b> {escape(d['task'])}\n"
+                 f"📝 <b>Задание:</b> {task_link(d['task'], d.get('url'))}\n"
                  f"🗓️ <b>Срок сдачи:</b> {d['due_date']}" for d in dated]
             )
 
@@ -229,7 +228,7 @@ async def process_password(message: types.Message, state: FSMContext):
                 f"❔ <b>Без указанного срока сдачи ({len(undated)}):</b>\n\n"
                 + "\n\n".join(
                     [f"📚 <b>{escape(d['subject'])}</b>\n"
-                     f"📝 <b>Задание:</b> {escape(d['task'])}" for d in undated]
+                     f"📝 <b>Задание:</b> {task_link(d['task'], d.get('url'))}" for d in undated]
                 )
                 + "\n\n<i>Срок для них можно назначить самому: «🚨 Посмотреть дедлайны» → "
                   "«❔ Без срока сдачи».</i>"
@@ -263,9 +262,10 @@ def format_deadlines_page(deadlines: list, page: int, page_size: int = 5) -> str
 
     deadlines_text = "⏳ <b>Ваши актуальные дедлайны:</b>\n\n"
     for i, d in enumerate(page_deadlines, start=start_index + 1):
+        # Название задания - ссылка на него в ЛК (экранирование внутри task_link)
         deadlines_text += (
             f"{i}.📚 <b>{escape(d.course_name)}</b>\n"
-            f"   📝 <b>Задание:</b> {escape(d.task_name)}\n"
+            f"   📝 <b>Задание:</b> {task_link(d.task_name, d.task_url)}\n"
             f"   🗓️ <b>Срок сдачи:</b> {d.due_date.strftime('%d.%m.%Y')}"
             f"{' <i>(ваш)</i>' if d.is_user_dated else ''}\n\n"
         )
@@ -296,7 +296,8 @@ async def show_deadlines(message: types.Message):
     await message.answer(
         page_text,
         reply_markup=get_pagination_keyboard(current_page=0, total_pages=total_pages, undated_count=undated_count),
-        parse_mode="HTML"
+        parse_mode="HTML",
+        link_preview_options=NO_LINK_PREVIEW
     )
 
     logger.info(f"Пользователь {message.from_user.id} посмотрел все дедлайны")
@@ -401,11 +402,12 @@ async def update_notification_settings_menu(callback: CallbackQuery):
 # Кнопка "Настройка дедлайнов"
 @router.message(F.text == "🛠️ Настройка дедлайнов")
 async def settings_deadlines_menu(message: types.Message):
-    deadlines = await get_user_deadlines_from_db(message.from_user.id)
+    deadlines = await get_manageable_deadlines_from_db(message.from_user.id)
 
     await message.answer(
         "🔧 Здесь вы можете управлять дедлайнами:\n"
         "добавлять собственные или удалять уже имеющиеся",
+        parse_mode="HTML",
         reply_markup=get_deadlines_settings_keyboard(
             deadlines,
             current_page=0,
@@ -450,7 +452,8 @@ async def deadlines_page_callback(callback: CallbackQuery):
     await callback.message.edit_text(
         page_text,
         reply_markup=get_pagination_keyboard(current_page=page, total_pages=total_pages, undated_count=undated_count),
-        parse_mode="HTML"
+        parse_mode="HTML",
+        link_preview_options=NO_LINK_PREVIEW
     )
     await callback.answer()
 
@@ -488,7 +491,7 @@ async def settings_page_callback(callback: CallbackQuery):
         logger.error("Не удалось обработать callback-запрос для обработки переключения страниц в меню настройки дедлайнов")
         return
     page = int(callback.data.split("_")[2])
-    deadlines = await get_user_deadlines_from_db(callback.from_user.id)
+    deadlines = await get_manageable_deadlines_from_db(callback.from_user.id)
 
     await callback.message.edit_reply_markup(
         reply_markup=get_deadlines_settings_keyboard(
@@ -571,7 +574,7 @@ async def delete_deadline_confirm_callback(callback: CallbackQuery):
     text = (
         f"Вы уверены, что хотите удалить дедлайн?\n\n"
         f"📚 <b>{escape(deadline.course_name)}</b>\n"
-        f"📝 {escape(deadline.task_name)}\n"
+        f"📝 {task_link(deadline.task_name, deadline.task_url)}\n"
         f"🗓️ {deadline.due_date.strftime('%d.%m.%Y') if deadline.due_date else 'срок не указан'}"
     )
 
@@ -583,7 +586,8 @@ async def delete_deadline_confirm_callback(callback: CallbackQuery):
             cancel_text="Нет, оставить",
             cancel_callback="cancel_del_deadline"
         ),
-        parse_mode="HTML"
+        parse_mode="HTML",
+        link_preview_options=NO_LINK_PREVIEW
     )
     await callback.answer()
     logger.info(f"Пользователь {callback.from_user.id} пытается удалить дедлайн")
@@ -598,7 +602,7 @@ async def confirm_delete_deadline_callback(callback: CallbackQuery):
     await move_deadline_to_trash(deadline_id)
 
     # Обновление исходного меню настроек, чтобы показать исчезновение дедлайна
-    deadlines = await get_user_deadlines_from_db(callback.from_user.id)
+    deadlines = await get_manageable_deadlines_from_db(callback.from_user.id)
     await callback.message.edit_text(
         "🚮 Дедлайн перемещён в корзину. Вот обновленный список:",
         reply_markup=get_deadlines_settings_keyboard(
@@ -618,7 +622,7 @@ async def cancel_delete_deadline_callback(callback: CallbackQuery):
     Хендлер, который срабатывает при отмене удаления, возвращая пользователя
     в меню настроек дедлайнов.
     """
-    deadlines = await get_user_deadlines_from_db(callback.from_user.id)
+    deadlines = await get_manageable_deadlines_from_db(callback.from_user.id)
     await callback.message.edit_text(
         "❕ Удаление отменено. Вы снова в меню управления дедлайнами.",
         reply_markup=get_deadlines_settings_keyboard(
@@ -752,7 +756,7 @@ async def empty_trash_confirmed_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "back_to_settings")
 async def back_to_settings_callback(callback: CallbackQuery):
     """Функция 'симулирует' нажатие на кнопку 'Настройка дедлайнов', чтобы вернуться в предыдущее меню."""
-    deadlines = await get_user_deadlines_from_db(callback.from_user.id)
+    deadlines = await get_manageable_deadlines_from_db(callback.from_user.id)
     await callback.message.edit_text(
         "🔧 Здесь вы можете управлять дедлайнами:",
         reply_markup=get_deadlines_settings_keyboard(deadlines, 0, PAGE_SIZE, callback.from_user.id)
@@ -780,15 +784,10 @@ def format_undated_page(deadlines: list, page: int, page_size: int = 5) -> str:
     )
 
     for i, d in enumerate(page_deadlines, start=start_index + 1):
-        # Названия из ЛК экранируются: символы < и & сломали бы разметку сообщения
-        task_name = escape(d.task_name)
-
-        # Название задания - ссылка на него в ЛК (у записей, созданных до миграции, ссылки нет)
-        task_line = f'<a href="{escape(d.task_url)}">{task_name}</a>' if d.task_url else task_name
-
+        # Название задания - ссылка на него в ЛК (экранирование внутри task_link)
         text += (
             f"{i}.📚 <b>{escape(d.course_name)}</b>\n"
-            f"   📝 <b>Задание:</b> {task_line}\n"
+            f"   📝 <b>Задание:</b> {task_link(d.task_name, d.task_url)}\n"
             f"   🗓️ <b>Срок сдачи:</b> <i>не указан</i>\n\n"
         )
     return text
@@ -853,20 +852,6 @@ async def undated_page_callback(callback: CallbackQuery):
     await callback.answer()
     logger.info(f"Пользователь {callback.from_user.id} смотрит дедлайны без срока сдачи (страница {page})")
 
-
-@router.callback_query(F.data.startswith("undated_trash_"))
-async def undated_trash_callback(callback: CallbackQuery):
-    """
-    Убирает дедлайн без срока сдачи в корзину.
-    Подтверждение не запрашивается: действие обратимо через корзину.
-    """
-    _, _, deadline_id, page = callback.data.split("_")
-    await move_deadline_to_trash(int(deadline_id))
-
-    await show_undated_page(callback, page=int(page))
-    await callback.answer("🚮 Дедлайн перемещён в корзину!")
-    logger.info(f"Пользователь {callback.from_user.id} убрал в корзину дедлайн без срока сдачи")
-
 # -------------------------------------------------------------------------------------------
 # FSM для назначения собственного срока сдачи дедлайну без даты
 
@@ -894,10 +879,11 @@ async def set_deadline_date_start(callback: CallbackQuery, state: FSMContext):
 
     await callback.message.edit_text(
         f"📚 <b>{escape(deadline.course_name)}</b>\n"
-        f"📝 {escape(deadline.task_name)}\n\n"
+        f"📝 {task_link(deadline.task_name, deadline.task_url)}\n\n"
         f"✍ Введите <b>свой</b> срок сдачи в формате ДД.ММ.ГГГГ (например, {date_example}):",
         reply_markup=get_cancel_setdate_keyboard(),
-        parse_mode="HTML"
+        parse_mode="HTML",
+        link_preview_options=NO_LINK_PREVIEW
     )
     await callback.answer()
     logger.info(f"Пользователь {callback.from_user.id} назначает срок сдачи дедлайну id={deadline_id}")
