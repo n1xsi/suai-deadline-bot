@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 
 from loguru import logger
-from sqlalchemy import select, update, delete, func
+from sqlalchemy import select, update, delete, func, or_
 
 from src.database.engine import async_session_factory
 from src.database.models import User, Deadline
@@ -185,6 +185,7 @@ async def update_user_deadlines(telegram_id: int, new_parsed_deadlines: list[dic
                             'course_name': existing_dl.course_name,
                             'task_name': existing_dl.task_name,
                             'due_date': due_date_obj,
+                            'task_url': task_url or existing_dl.task_url,
                             'previous_user_date': existing_dl.due_date if existing_dl.is_user_dated else None
                         })
 
@@ -353,6 +354,40 @@ async def get_undated_deadlines_from_db(telegram_id: int) -> list[Deadline]:
         result = await session.execute(query)
         deadlines = result.scalars().all()
         logger.success(f'Пользователь с telegram_id={telegram_id} имеет {len(deadlines)} дедлайнов без срока сдачи')
+        return list(deadlines)
+
+
+async def get_manageable_deadlines_from_db(telegram_id: int) -> list[Deadline]:
+    """
+    Получает все дедлайны, которыми пользователь может управлять в меню настроек:
+    актуальные (с не прошедшим сроком) и те, у которых срок сдачи не указан.
+    Сначала идут дедлайны с датой (по возрастанию срока), затем бездатные.
+    """
+    async with async_session_factory() as session:
+        user = await get_user_by_telegram_id(telegram_id)
+        if not user:
+            logger.error(
+                f'Не удалось получить управляемые дедлайны для telegram_id={telegram_id}, '
+                f'пользователя не существует'
+            )
+            return []
+
+        query = (
+            select(Deadline)
+            .where(
+                Deadline.user_id == user.id,
+                Deadline.is_trashed == False,
+                or_(
+                    Deadline.due_date.is_(None),
+                    Deadline.due_date >= datetime.now().date()
+                )
+            )
+            # is_(None) даёт 0 для дат и 1 для NULL - бездатные оказываются в конце списка
+            .order_by(Deadline.due_date.is_(None), Deadline.due_date.asc())
+        )
+        result = await session.execute(query)
+        deadlines = result.scalars().all()
+        logger.success(f'Пользователь с telegram_id={telegram_id} имеет {len(deadlines)} управляемых дедлайнов')
         return list(deadlines)
 
 
