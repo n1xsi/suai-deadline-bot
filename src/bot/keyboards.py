@@ -194,8 +194,8 @@ def get_pagination_keyboard(current_page: int, total_pages: int, undated_count: 
 def get_undated_deadlines_keyboard(deadlines: list, current_page: int, page_size: int):
     """
     Создаёт пагинированную клавиатуру для страницы дедлайнов без срока сдачи.
-    На каждый дедлайн - ряд из двух кнопок: назначить срок и убрать в корзину.
-    Номера кнопок совпадают с нумерацией дедлайнов в тексте сообщения.
+    Каждый дедлайн - кнопка назначения собственного срока; номера кнопок совпадают
+    с нумерацией дедлайнов в тексте сообщения.
     """
     builder = InlineKeyboardBuilder()
 
@@ -208,12 +208,8 @@ def get_undated_deadlines_keyboard(deadlines: list, current_page: int, page_size
     for number, deadline in enumerate(page_deadlines, start=start_index + 1):
         builder.row(
             InlineKeyboardButton(
-                text=f"🗓️ {number}. {deadline.course_name[:18]}...",
+                text=f"🗓️ {number}. Назначить срок: {deadline.course_name[:20]}...",
                 callback_data=f"setdate_{deadline.id}_{current_page}"
-            ),
-            InlineKeyboardButton(
-                text=f"🗑️ {number}",
-                callback_data=f"undated_trash_{deadline.id}_{current_page}"
             )
         )
 
